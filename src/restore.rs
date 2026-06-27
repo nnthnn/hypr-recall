@@ -152,30 +152,31 @@ pub async fn run(path: &Path) -> Result<()> {
     Ok(())
 }
 
-async fn reorder_columns(ws_id: i32, ws_entry: &crate::session::WorkspaceEntry) -> Result<()> {
-    sleep(Duration::from_millis(200)).await;
+pub struct LiveWindow {
+    pub address: String,
+    pub class: String,
+}
 
-    let saved_classes: Vec<&str> = ws_entry.windows.iter().map(|w| w.class.as_str()).collect();
-    let n = saved_classes.len();
+/// Computes the swap operations needed to bring `live` into the order specified by `saved`.
+///
+/// Uses insertion sort: for each position, find the expected class and bubble it left.
+/// Mutates `live` in place to simulate the swaps.
+/// Returns `(address_to_focus, steps)` pairs ready to dispatch.
+pub fn plan_column_swaps(saved: &[&str], live: &mut Vec<LiveWindow>) -> Vec<(String, usize)> {
+    let n = saved.len().min(live.len());
+    let mut ops = Vec::new();
 
-    // Insertion sort: for each position i, find the correct window and bubble it left
     for i in 0..n.saturating_sub(1) {
-        let expected = saved_classes[i];
-
-        // Re-query live positions each iteration (positions shift after swapcol)
-        let live = hyprland::get_workspace_clients_sorted(ws_id)?;
-
-        let actual = live.get(i).map(|c| c.initial_class.as_str()).unwrap_or("");
-        if actual == expected {
+        let expected = saved[i];
+        if live[i].class == expected {
             continue;
         }
 
-        // Find where expected class is (search from i+1 onward)
         let target_pos = live
             .iter()
             .enumerate()
             .skip(i + 1)
-            .find(|(_, c)| c.initial_class == expected)
+            .find(|(_, w)| w.class == expected)
             .map(|(j, _)| j);
 
         let Some(target_pos) = target_pos else {
@@ -184,10 +185,35 @@ async fn reorder_columns(ws_id: i32, ws_entry: &crate::session::WorkspaceEntry) 
         };
 
         let steps = target_pos - i;
-        let target_addr = &live[target_pos].address;
+        let addr = live[target_pos].address.clone();
         println!("  reorder: bubble {expected} from col {target_pos} → {i} ({steps} swap(s))");
+        ops.push((addr, steps));
 
-        hyprland::focus_window(target_addr)?;
+        let item = live.remove(target_pos);
+        live.insert(i, item);
+    }
+
+    ops
+}
+
+async fn reorder_columns(ws_id: i32, ws_entry: &crate::session::WorkspaceEntry) -> Result<()> {
+    sleep(Duration::from_millis(200)).await;
+
+    let saved_classes: Vec<&str> = ws_entry.windows.iter().map(|w| w.class.as_str()).collect();
+
+    let clients = hyprland::get_workspace_clients_sorted(ws_id)?;
+    let mut live: Vec<LiveWindow> = clients
+        .iter()
+        .map(|c| LiveWindow {
+            address: c.address.clone(),
+            class: c.initial_class.clone(),
+        })
+        .collect();
+
+    let ops = plan_column_swaps(&saved_classes, &mut live);
+
+    for (addr, steps) in ops {
+        hyprland::focus_window(&addr)?;
         for _ in 0..steps {
             hyprland::swapcol_left()?;
             sleep(Duration::from_millis(150)).await;
@@ -196,10 +222,10 @@ async fn reorder_columns(ws_id: i32, ws_entry: &crate::session::WorkspaceEntry) 
 
     // Apply col_width ratios in final sorted order
     sleep(Duration::from_millis(200)).await;
-    let live = hyprland::get_workspace_clients_sorted(ws_id)?;
+    let live_final = hyprland::get_workspace_clients_sorted(ws_id)?;
 
     for (i, window) in ws_entry.windows.iter().enumerate() {
-        let Some(live_win) = live.get(i) else {
+        let Some(live_win) = live_final.get(i) else {
             continue;
         };
         hyprland::focus_window(&live_win.address)?;
@@ -209,4 +235,94 @@ async fn reorder_columns(ws_id: i32, ws_entry: &crate::session::WorkspaceEntry) 
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn lw(address: &str, class: &str) -> LiveWindow {
+        LiveWindow { address: address.into(), class: class.into() }
+    }
+
+    fn classes(live: &[LiveWindow]) -> Vec<&str> {
+        live.iter().map(|w| w.class.as_str()).collect()
+    }
+
+    #[test]
+    fn already_sorted_produces_no_ops() {
+        let saved = ["a", "b", "c"];
+        let mut live = vec![lw("0x1", "a"), lw("0x2", "b"), lw("0x3", "c")];
+        let ops = plan_column_swaps(&saved, &mut live);
+        assert!(ops.is_empty());
+        assert_eq!(classes(&live), saved);
+    }
+
+    #[test]
+    fn swap_two_adjacent() {
+        let saved = ["a", "b"];
+        let mut live = vec![lw("0x1", "b"), lw("0x2", "a")];
+        let ops = plan_column_swaps(&saved, &mut live);
+        assert_eq!(ops, vec![("0x2".to_string(), 1)]);
+        assert_eq!(classes(&live), saved);
+    }
+
+    #[test]
+    fn bubble_from_end() {
+        let saved = ["c", "a", "b"];
+        let mut live = vec![lw("0x1", "a"), lw("0x2", "b"), lw("0x3", "c")];
+        let ops = plan_column_swaps(&saved, &mut live);
+        assert_eq!(ops, vec![("0x3".to_string(), 2)]);
+        assert_eq!(classes(&live), saved);
+    }
+
+    #[test]
+    fn full_reverse() {
+        let saved = ["c", "b", "a"];
+        let mut live = vec![lw("0x1", "a"), lw("0x2", "b"), lw("0x3", "c")];
+        plan_column_swaps(&saved, &mut live);
+        assert_eq!(classes(&live), saved);
+    }
+
+    #[test]
+    fn single_window_no_ops() {
+        let saved = ["a"];
+        let mut live = vec![lw("0x1", "a")];
+        let ops = plan_column_swaps(&saved, &mut live);
+        assert!(ops.is_empty());
+    }
+
+    #[test]
+    fn missing_class_skipped_no_panic() {
+        let saved = ["x", "a", "b"];
+        let mut live = vec![lw("0x1", "a"), lw("0x2", "b")];
+        let ops = plan_column_swaps(&saved, &mut live);
+        // "x" not in live — should produce no op for it and not panic
+        assert!(ops.is_empty());
+    }
+
+    #[test]
+    fn duplicate_classes_already_sorted() {
+        let saved = ["firefox", "ghostty", "ghostty"];
+        let mut live = vec![
+            lw("0x1", "firefox"),
+            lw("0x2", "ghostty"),
+            lw("0x3", "ghostty"),
+        ];
+        let ops = plan_column_swaps(&saved, &mut live);
+        assert!(ops.is_empty());
+        assert_eq!(classes(&live), saved);
+    }
+
+    #[test]
+    fn duplicate_classes_need_reorder() {
+        let saved = ["ghostty", "firefox", "ghostty"];
+        let mut live = vec![
+            lw("0x1", "firefox"),
+            lw("0x2", "ghostty"),
+            lw("0x3", "ghostty"),
+        ];
+        plan_column_swaps(&saved, &mut live);
+        assert_eq!(classes(&live), saved);
+    }
 }

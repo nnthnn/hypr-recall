@@ -2,20 +2,20 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct WindowEntry {
     pub class: String,
     pub exe: String,
     pub col_width: f64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct WorkspaceEntry {
     pub workspace: i32,
     pub windows: Vec<WindowEntry>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Session {
     pub active_workspace: i32,
     pub workspaces: Vec<WorkspaceEntry>,
@@ -35,5 +35,65 @@ impl Session {
         std::fs::write(&tmp, serde_json::to_string_pretty(self)?)?;
         std::fs::rename(&tmp, path)?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sample() -> Session {
+        Session {
+            active_workspace: 2,
+            workspaces: vec![
+                WorkspaceEntry {
+                    workspace: 1,
+                    windows: vec![
+                        WindowEntry {
+                            class: "firefox".into(),
+                            exe: "/usr/lib/firefox/firefox".into(),
+                            col_width: 0.989,
+                        },
+                        WindowEntry {
+                            class: "com.mitchellh.ghostty".into(),
+                            exe: "/usr/bin/ghostty".into(),
+                            col_width: 0.493,
+                        },
+                    ],
+                },
+                WorkspaceEntry {
+                    workspace: 2,
+                    windows: vec![WindowEntry {
+                        class: "dev.zed.Zed".into(),
+                        exe: "/usr/bin/zed".into(),
+                        col_width: 1.0,
+                    }],
+                },
+            ],
+        }
+    }
+
+    #[test]
+    fn round_trip() {
+        let session = sample();
+        let path = std::env::temp_dir().join("hypr-recall-test-round-trip.json");
+        session.save_to(&path).unwrap();
+        let loaded = Session::load(&path).unwrap();
+        assert_eq!(session, loaded);
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn malformed_json_errors() {
+        let path = std::env::temp_dir().join("hypr-recall-test-malformed.json");
+        std::fs::write(&path, b"not json {{{").unwrap();
+        assert!(Session::load(&path).is_err());
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn missing_file_errors() {
+        let path = std::env::temp_dir().join("hypr-recall-test-nonexistent-xyz.json");
+        assert!(Session::load(&path).is_err());
     }
 }

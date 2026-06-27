@@ -183,6 +183,36 @@ fn parse_openwindow_line(line: &str) -> Option<WindowOpenEvent> {
     Some(WindowOpenEvent { class })
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_openwindow_event() {
+        let ev = parse_openwindow_line("openwindow>>0xdeadbeef,1,firefox,Mozilla Firefox").unwrap();
+        assert_eq!(ev.class, "firefox");
+    }
+
+    #[test]
+    fn parses_dotted_class_name() {
+        let ev = parse_openwindow_line("openwindow>>0x1,2,com.mitchellh.ghostty,Ghostty").unwrap();
+        assert_eq!(ev.class, "com.mitchellh.ghostty");
+    }
+
+    #[test]
+    fn ignores_non_openwindow_events() {
+        assert!(parse_openwindow_line("closewindow>>0xdeadbeef").is_none());
+        assert!(parse_openwindow_line("activewindow>>firefox,Firefox").is_none());
+        assert!(parse_openwindow_line("").is_none());
+    }
+
+    #[test]
+    fn title_with_commas_doesnt_affect_class() {
+        let ev = parse_openwindow_line("openwindow>>0x1,1,firefox,Page, with, commas").unwrap();
+        assert_eq!(ev.class, "firefox");
+    }
+}
+
 pub struct EventStream {
     rx: mpsc::Receiver<WindowOpenEvent>,
     buffer: VecDeque<WindowOpenEvent>,
