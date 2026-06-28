@@ -7,6 +7,7 @@ mod lock;
 mod restore;
 mod save;
 mod session;
+mod status;
 
 #[derive(Parser)]
 #[command(
@@ -25,6 +26,10 @@ enum Commands {
         file: Option<PathBuf>,
     },
     Restore {
+        #[arg(short, long, help = "Path to session file")]
+        file: Option<PathBuf>,
+    },
+    Status {
         #[arg(short, long, help = "Path to session file")]
         file: Option<PathBuf>,
     },
@@ -47,6 +52,10 @@ async fn main() -> Result<()> {
         Commands::Restore { file } => {
             let path = file.unwrap_or_else(default_path);
             restore::run(&path).await?;
+        }
+        Commands::Status { file } => {
+            let path = file.unwrap_or_else(default_path);
+            status::run(&path)?;
         }
     }
 
