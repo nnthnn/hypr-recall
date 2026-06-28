@@ -21,11 +21,11 @@ const SESSION_RESTORE_APPS: &[&str] = &[
     "brave-browser",
 ];
 
-fn is_restore_app(class: &str) -> bool {
-    SESSION_RESTORE_APPS.contains(&class)
+fn is_restore_app(class: &str, extra: &[String]) -> bool {
+    SESSION_RESTORE_APPS.contains(&class) || extra.iter().any(|e| e == class)
 }
 
-pub async fn run(path: &Path) -> Result<()> {
+pub async fn run(path: &Path, extra_restore_apps: &[String]) -> Result<()> {
     if !path.exists() {
         eprintln!(
             "hypr-recall: no session file at {} — run 'hypr-recall save' first",
@@ -101,7 +101,7 @@ pub async fn run(path: &Path) -> Result<()> {
                 "  {class}: saved={saved_count} pre={pre} needed={needed} before={before_total}"
             );
 
-            if is_restore_app(class) {
+            if is_restore_app(class, extra_restore_apps) {
                 // Launch once; the app restores all its windows itself
                 let mut child = tokio::process::Command::new(exe)
                     .stdin(Stdio::null())
@@ -160,7 +160,7 @@ pub async fn run(path: &Path) -> Result<()> {
     Ok(())
 }
 
-pub fn run_dry(path: &Path) -> Result<()> {
+pub fn run_dry(path: &Path, extra_restore_apps: &[String]) -> Result<()> {
     if !path.exists() {
         eprintln!(
             "hypr-recall: no session file at {} — run 'hypr-recall save' first",
@@ -215,7 +215,7 @@ pub fn run_dry(path: &Path) -> Result<()> {
 
             if needed == 0 {
                 println!("    {class:<40} → skip ({pre} already open)");
-            } else if is_restore_app(class) {
+            } else if is_restore_app(class, extra_restore_apps) {
                 println!(
                     "    {class:<40} → launch 1  [session-restore, waits for {needed} window{}]",
                     if needed == 1 { "" } else { "s" }
