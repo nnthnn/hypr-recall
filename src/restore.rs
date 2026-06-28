@@ -160,6 +160,76 @@ pub async fn run(path: &Path) -> Result<()> {
     Ok(())
 }
 
+pub fn run_dry(path: &Path) -> Result<()> {
+    if !path.exists() {
+        eprintln!(
+            "hypr-recall: no session file at {} — run 'hypr-recall save' first",
+            path.display()
+        );
+        return Ok(());
+    }
+
+    let session = Session::load(path)?;
+
+    let pre_existing: HashMap<String, usize> = {
+        let clients = hyprland::get_clients()?;
+        let mut map: HashMap<String, usize> = HashMap::new();
+        for c in &clients {
+            *map.entry(c.initial_class.clone()).or_default() += 1;
+        }
+        map
+    };
+
+    println!("hypr-recall: dry run — no changes will be made\n");
+
+    for ws_entry in &session.workspaces {
+        let ws_id = ws_entry.workspace;
+        let active = if ws_id == session.active_workspace {
+            "  ← active"
+        } else {
+            ""
+        };
+        println!(
+            "  workspace {} ({} window{}){active}",
+            ws_id,
+            ws_entry.windows.len(),
+            if ws_entry.windows.len() == 1 { "" } else { "s" },
+        );
+
+        let mut processed: HashSet<String> = HashSet::new();
+
+        for window in &ws_entry.windows {
+            let class = &window.class;
+            if processed.contains(class) {
+                continue;
+            }
+            processed.insert(class.clone());
+
+            let saved_count = ws_entry
+                .windows
+                .iter()
+                .filter(|w| &w.class == class)
+                .count();
+            let pre = pre_existing.get(class).copied().unwrap_or(0);
+            let needed = saved_count.saturating_sub(pre);
+
+            if needed == 0 {
+                println!("    {class:<40} → skip ({pre} already open)");
+            } else if is_restore_app(class) {
+                println!(
+                    "    {class:<40} → launch 1  [session-restore, waits for {needed} window{}]",
+                    if needed == 1 { "" } else { "s" }
+                );
+            } else {
+                println!("    {class:<40} → launch {needed}");
+            }
+        }
+        println!();
+    }
+
+    Ok(())
+}
+
 pub struct LiveWindow {
     pub address: String,
     pub class: String,
