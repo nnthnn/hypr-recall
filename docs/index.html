@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>hypr-recall — Save &amp; restore Hyprland window sessions</title>
+  <meta name="description" content="hypr-recall saves and restores Hyprland window sessions with first-class support for scrolling layout column order and width. The only tool that gets your columns back exactly right.">
+  <meta name="keywords" content="hyprland, wayland, session restore, window manager, scrolling layout, tiling, linux">
+
+  <!-- Open Graph -->
+  <meta property="og:type"        content="website">
+  <meta property="og:url"         content="https://nnthnn.github.io/hypr-recall/">
+  <meta property="og:title"       content="hypr-recall — Save &amp; restore Hyprland window sessions">
+  <meta property="og:description" content="The only Hyprland session restore tool that gets scrolling layout column order and width exactly right.">
+  <meta property="og:image"       content="https://nnthnn.github.io/hypr-recall/assets/logo-transparent.png">
+
+  <!-- Twitter -->
+  <meta name="twitter:card"        content="summary">
+  <meta name="twitter:title"       content="hypr-recall">
+  <meta name="twitter:description" content="Save and restore Hyprland window sessions with scrolling layout column order and width.">
+  <meta name="twitter:image"       content="https://nnthnn.github.io/hypr-recall/assets/logo-transparent.png">
+
+  <!-- Canonical -->
+  <link rel="canonical" href="https://nnthnn.github.io/hypr-recall/">
+
+  <!-- Favicon -->
+  <link rel="icon"             href="assets/logo-32.png" type="image/png">
+  <link rel="apple-touch-icon" href="assets/logo-transparent.png">
+
+  <!-- Structured data -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "hypr-recall",
+    "description": "Save and restore Hyprland window sessions with scrolling layout column order and width support.",
+    "applicationCategory": "UtilitiesApplication",
+    "operatingSystem": "Linux",
+    "license": "https://opensource.org/licenses/MIT",
+    "url": "https://github.com/nnthnn/hypr-recall"
+  }
+  </script>
+
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #080810;
+      color: #e2e8f0;
+      font-family: 'Courier New', monospace;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    body::after {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(0, 0, 0, 0.12) 2px,
+        rgba(0, 0, 0, 0.12) 4px
+      );
+      pointer-events: none;
+      z-index: 999;
+    }
+
+    .bg {
+      position: fixed;
+      inset: 0;
+      background:
+        radial-gradient(ellipse at 15% 50%, rgba(124, 58, 237, 0.18) 0%, transparent 55%),
+        radial-gradient(ellipse at 85% 30%, rgba(249, 115, 22, 0.14) 0%, transparent 55%);
+      z-index: 0;
+      animation: bgpulse 7s ease-in-out infinite alternate;
+    }
+
+    @keyframes bgpulse {
+      from { opacity: 0.6; }
+      to   { opacity: 1.0; }
+    }
+
+    .container {
+      position: relative;
+      z-index: 1;
+      max-width: 820px;
+      margin: 0 auto;
+      padding: 80px 24px 60px;
+      text-align: center;
+    }
+
+    /* ── Hero ── */
+
+    .logo {
+      width: 148px;
+      height: 148px;
+      margin: 0 auto 36px;
+      display: block;
+      animation: logopulse 3s ease-in-out infinite;
+    }
+
+    @keyframes logopulse {
+      0%, 100% {
+        filter:
+          drop-shadow(0 0 14px rgba(249, 115, 22, 0.55))
+          drop-shadow(0 0 36px rgba(124, 58, 237, 0.35));
+      }
+      50% {
+        filter:
+          drop-shadow(0 0 28px rgba(249, 115, 22, 0.85))
+          drop-shadow(0 0 60px rgba(124, 58, 237, 0.60));
+      }
+    }
+
+    h1 {
+      font-size: clamp(2.4rem, 8vw, 4rem);
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      background: linear-gradient(130deg, #f97316 30%, #a855f7 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 20px;
+      position: relative;
+    }
+
+    h1::before, h1::after {
+      content: 'hypr-recall';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(130deg, #f97316 30%, #a855f7 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    h1::before {
+      animation: glitch1 5s infinite;
+      clip-path: polygon(0 18%, 100% 18%, 100% 38%, 0 38%);
+    }
+
+    h1::after {
+      animation: glitch2 5s infinite;
+      clip-path: polygon(0 62%, 100% 62%, 100% 82%, 0 82%);
+    }
+
+    @keyframes glitch1 {
+      0%, 88%, 100% { transform: none;            opacity: 0; }
+      90%           { transform: translateX(-5px); opacity: 0.75; }
+      93%           { transform: translateX( 5px); opacity: 0.75; }
+      95%           { transform: none;             opacity: 0; }
+    }
+
+    @keyframes glitch2 {
+      0%, 85%, 100% { transform: none;            opacity: 0; }
+      87%           { transform: translateX( 4px); opacity: 0.55; }
+      90%           { transform: translateX(-4px); opacity: 0.55; }
+      92%           { transform: none;             opacity: 0; }
+    }
+
+    .tagline {
+      font-size: 1.1rem;
+      color: #94a3b8;
+      margin-bottom: 52px;
+      line-height: 1.7;
+    }
+
+    .tagline strong { color: #f97316; }
+
+    /* ── Terminal block ── */
+
+    .terminal {
+      background: #0c0c18;
+      border: 1px solid #1e1e3a;
+      border-radius: 10px;
+      padding: 20px 24px;
+      text-align: left;
+      margin: 0 auto 64px;
+    }
+
+    .terminal::before {
+      content: '⬤  ⬤  ⬤';
+      display: block;
+      color: #2a2a4a;
+      font-size: 0.6rem;
+      margin-bottom: 14px;
+      letter-spacing: 5px;
+    }
+
+    .terminal code {
+      display: block;
+      font-size: 0.92rem;
+      line-height: 2.1;
+    }
+
+    .prompt { color: #7c3aed; }
+    .cmd    { color: #f8fafc; }
+    .cmt    { color: #334155; }
+
+    .cursor {
+      display: inline-block;
+      width: 7px;
+      height: 1em;
+      background: #f97316;
+      vertical-align: text-bottom;
+      animation: blink 1s step-end infinite;
+    }
+
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50%      { opacity: 0; }
+    }
+
+    /* ── Section headings ── */
+
+    .section-label {
+      font-size: 0.68rem;
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+      color: #334155;
+      margin-bottom: 24px;
+    }
+
+    /* ── Unique callouts ── */
+
+    .callouts {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1px;
+      background: #1a1a2e;
+      border: 1px solid #1a1a2e;
+      border-radius: 10px;
+      overflow: hidden;
+      margin-bottom: 16px;
+      text-align: left;
+    }
+
+    .callout {
+      background: #0c0c18;
+      padding: 22px 20px;
+      transition: background 0.2s;
+    }
+
+    .callout:hover { background: #0f0f1e; }
+
+    .callout-badge {
+      display: inline-block;
+      font-size: 0.62rem;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      color: #f97316;
+      border: 1px solid rgba(249, 115, 22, 0.35);
+      border-radius: 4px;
+      padding: 2px 7px;
+      margin-bottom: 10px;
+    }
+
+    .callout-badge.purple {
+      color: #a855f7;
+      border-color: rgba(168, 85, 247, 0.35);
+    }
+
+    .callout h3 {
+      font-size: 0.95rem;
+      color: #e2e8f0;
+      margin-bottom: 6px;
+      font-weight: 600;
+    }
+
+    .callout p {
+      font-size: 0.8rem;
+      color: #475569;
+      line-height: 1.6;
+    }
+
+    /* ── Feature grid ── */
+
+    .features {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(175px, 1fr));
+      gap: 12px;
+      margin-bottom: 64px;
+      text-align: left;
+    }
+
+    .feature {
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      border-radius: 8px;
+      padding: 16px 14px;
+      transition: border-color 0.2s;
+    }
+
+    .feature:hover { border-color: rgba(168, 85, 247, 0.3); }
+
+    .feature h3 {
+      font-size: 0.7rem;
+      color: #a855f7;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      margin-bottom: 7px;
+    }
+
+    .feature p {
+      font-size: 0.78rem;
+      color: #475569;
+      line-height: 1.6;
+    }
+
+    /* ── Links ── */
+
+    .links {
+      display: flex;
+      gap: 14px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-bottom: 80px;
+    }
+
+    .btn {
+      display: inline-block;
+      padding: 11px 28px;
+      border-radius: 6px;
+      font-family: 'Courier New', monospace;
+      font-size: 0.88rem;
+      text-decoration: none;
+      transition: all 0.2s;
+    }
+
+    .btn-primary {
+      background: linear-gradient(130deg, #f97316, #a855f7);
+      color: #fff;
+    }
+
+    .btn-primary:hover {
+      opacity: 0.82;
+      transform: translateY(-2px);
+    }
+
+    .btn-secondary {
+      border: 1px solid #1e1e3a;
+      color: #64748b;
+    }
+
+    .btn-secondary:hover {
+      border-color: #a855f7;
+      color: #a855f7;
+    }
+
+    footer {
+      color: #1e1e3a;
+      font-size: 0.72rem;
+      letter-spacing: 0.05em;
+    }
+
+    @media (max-width: 560px) {
+      .callouts { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="bg"></div>
+
+  <div class="container">
+
+    <img src="assets/logo-transparent.png" alt="hypr-recall logo" class="logo" width="148" height="148">
+
+    <h1>hypr-recall</h1>
+
+    <p class="tagline">
+      Save and restore Hyprland window sessions.<br>
+      <strong>The only tool that restores scrolling layout column order and width.</strong>
+    </p>
+
+    <div class="terminal">
+      <code>
+        <span class="cmt"># add to hyprland.lua — restore on login</span><br>
+        <span class="prompt">▸</span> <span class="cmd">hl.exec("hypr-recall restore")</span><br>
+        <br>
+        <span class="cmt"># snapshot your session</span><br>
+        <span class="prompt">▸</span> <span class="cmd">hypr-recall save</span><br>
+        <br>
+        <span class="cmt"># preview before committing</span><br>
+        <span class="prompt">▸</span> <span class="cmd">hypr-recall restore --dry-run</span><span class="cursor"></span>
+      </code>
+    </div>
+
+    <!-- Unique differentiators -->
+    <p class="section-label">what makes it different</p>
+    <div class="callouts" style="margin-bottom: 48px;">
+      <div class="callout">
+        <span class="callout-badge">unique</span>
+        <h3>Column order</h3>
+        <p>Saves windows in left-to-right column order and uses <code>swapcol</code> dispatches to restore the exact same arrangement — no other tool does this.</p>
+      </div>
+      <div class="callout">
+        <span class="callout-badge">unique</span>
+        <h3>Column widths</h3>
+        <p>Stores each column's width as a ratio of monitor width. Survives monitor changes and multi-monitor setups without manual resizing.</p>
+      </div>
+      <div class="callout">
+        <span class="callout-badge purple">smart</span>
+        <h3>Session-restore app detection</h3>
+        <p>Firefox, Zed, Chromium and similar apps restore their own windows — hypr-recall launches them once and waits for all their windows together, handling single-instance handoff automatically.</p>
+      </div>
+      <div class="callout">
+        <span class="callout-badge purple">smart</span>
+        <h3>Event-driven, not polling</h3>
+        <p>Subscribes to Hyprland's socket2 <code>openwindow</code> event stream. No busy-waits, no fixed delays — each window is detected the moment it appears.</p>
+      </div>
+    </div>
+
+    <!-- Standard features -->
+    <p class="section-label">everything else</p>
+    <div class="features">
+      <div class="feature">
+        <h3>Dry run</h3>
+        <p>Preview exactly what would be launched and skipped before touching anything.</p>
+      </div>
+      <div class="feature">
+        <h3>Status</h3>
+        <p>See session age, workspace and window counts, and column widths at a glance.</p>
+      </div>
+      <div class="feature">
+        <h3>Edit</h3>
+        <p>Open the session JSON in <code>$EDITOR</code> to tweak widths or add launch args by hand.</p>
+      </div>
+      <div class="feature">
+        <h3>Lock file</h3>
+        <p>RAII lock prevents concurrent restores from stomping on each other.</p>
+      </div>
+      <div class="feature">
+        <h3>Auto-save hooks</h3>
+        <p>Wire into <code>hl.on("hyprland.shutdown")</code> or a repeating timer — no keybind required.</p>
+      </div>
+      <div class="feature">
+        <h3>Custom restore apps</h3>
+        <p>Add any app to the session-restore list with <code>--session-restore-app</code>.</p>
+      </div>
+      <div class="feature">
+        <h3>Active workspace</h3>
+        <p>Saves and restores which workspace was focused when you saved.</p>
+      </div>
+      <div class="feature">
+        <h3>No config file</h3>
+        <p>All options are CLI flags. Configure entirely from your <code>hyprland.lua</code> callsite.</p>
+      </div>
+    </div>
+
+    <div class="links">
+      <a href="https://github.com/nnthnn/hypr-recall" class="btn btn-primary">GitHub →</a>
+      <a href="https://github.com/nnthnn/hypr-recall#readme" class="btn btn-secondary">readme</a>
+    </div>
+
+    <footer>MIT · built for Hyprland scrolling layout · made by <a href="https://github.com/nnthnn" style="color: #334155; text-decoration: none;" onmouseover="this.style.color='#f97316'" onmouseout="this.style.color='#334155'">nathan</a></footer>
+  </div>
+</body>
+</html>
