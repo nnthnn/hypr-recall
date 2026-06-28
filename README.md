@@ -1,6 +1,10 @@
+<div align="center">
+  <img src="assets/logo-transparent.png" alt="hypr-recall" width="120">
+
 # hypr-recall
 
 [![CI](https://github.com/nnthnn/hypr-recall/actions/workflows/ci.yml/badge.svg)](https://github.com/nnthnn/hypr-recall/actions/workflows/ci.yml)
+</div>
 
 Save and restore Hyprland window sessions, with first-class support for Hyprland's scrolling layout column order and width.
 
