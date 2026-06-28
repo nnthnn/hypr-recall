@@ -9,7 +9,10 @@ mod save;
 mod session;
 
 #[derive(Parser)]
-#[command(name = "hypr-recall", about = "Save and restore Hyprland window sessions")]
+#[command(
+    name = "hypr-recall",
+    about = "Save and restore Hyprland window sessions"
+)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,

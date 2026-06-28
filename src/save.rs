@@ -33,12 +33,10 @@ pub fn run(path: &Path) -> Result<()> {
             Err(_) => continue,
         };
 
-        let monitor_width = monitor_widths
-            .get(&client.monitor)
-            .copied()
-            .unwrap_or(1920);
+        let monitor_width = monitor_widths.get(&client.monitor).copied().unwrap_or(1920);
 
-        let col_width = (f64::from(client.width) / f64::from(monitor_width) * 1000.0).round() / 1000.0;
+        let col_width =
+            (f64::from(client.width) / f64::from(monitor_width) * 1000.0).round() / 1000.0;
 
         rows.push((
             client.workspace_id,

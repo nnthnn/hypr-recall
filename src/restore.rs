@@ -55,7 +55,10 @@ pub async fn run(path: &Path) -> Result<()> {
 
     for ws_entry in &session.workspaces {
         let ws_id = ws_entry.workspace;
-        println!("hypr-recall: restoring workspace {ws_id} ({} windows)", ws_entry.windows.len());
+        println!(
+            "hypr-recall: restoring workspace {ws_id} ({} windows)",
+            ws_entry.windows.len()
+        );
 
         hyprland::focus_workspace(ws_id)?;
         sleep(Duration::from_millis(200)).await;
@@ -94,7 +97,9 @@ pub async fn run(path: &Path) -> Result<()> {
             let exe = window.exe.trim_end_matches(" (deleted)");
             let target_total = before_total + needed;
 
-            println!("  {class}: saved={saved_count} pre={pre} needed={needed} before={before_total}");
+            println!(
+                "  {class}: saved={saved_count} pre={pre} needed={needed} before={before_total}"
+            );
 
             if is_restore_app(class) {
                 // Launch once; the app restores all its windows itself
@@ -109,7 +114,10 @@ pub async fn run(path: &Path) -> Result<()> {
                 let got = events
                     .wait_for_count(class, needed, deadline, Some(&mut child))
                     .await;
-                println!("  {class}: {got}/{needed} windows appeared (total: {})", before_total + got);
+                println!(
+                    "  {class}: {got}/{needed} windows appeared (total: {})",
+                    before_total + got
+                );
             } else {
                 // Launch one at a time and wait for each window
                 for launch_n in 1..=needed {
@@ -241,7 +249,10 @@ mod tests {
     use super::*;
 
     fn lw(address: &str, class: &str) -> LiveWindow {
-        LiveWindow { address: address.into(), class: class.into() }
+        LiveWindow {
+            address: address.into(),
+            class: class.into(),
+        }
     }
 
     fn classes(live: &[LiveWindow]) -> Vec<&str> {

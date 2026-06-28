@@ -88,8 +88,8 @@ pub fn get_active_workspace_id() -> Result<i32> {
         .args(["activeworkspace", "-j"])
         .output()
         .context("failed to run hyprctl activeworkspace")?;
-    let raw: RawActiveWorkspace = serde_json::from_slice(&out.stdout)
-        .context("failed to parse hyprctl activeworkspace")?;
+    let raw: RawActiveWorkspace =
+        serde_json::from_slice(&out.stdout).context("failed to parse hyprctl activeworkspace")?;
     Ok(raw.id)
 }
 
