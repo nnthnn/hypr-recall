@@ -31,6 +31,13 @@ enum Commands {
         file: Option<PathBuf>,
         #[arg(long, help = "Print what would be restored without launching anything")]
         dry_run: bool,
+        #[arg(
+            long,
+            value_name = "CLASS",
+            help = "Treat CLASS as a session-restore app (repeatable)",
+            action = clap::ArgAction::Append,
+        )]
+        session_restore_app: Vec<String>,
     },
     Status {
         #[arg(short, long, help = "Path to session file")]
@@ -56,12 +63,16 @@ async fn main() -> Result<()> {
             let path = file.unwrap_or_else(default_path);
             save::run(&path)?;
         }
-        Commands::Restore { file, dry_run } => {
+        Commands::Restore {
+            file,
+            dry_run,
+            session_restore_app,
+        } => {
             let path = file.unwrap_or_else(default_path);
             if dry_run {
-                restore::run_dry(&path)?;
+                restore::run_dry(&path, &session_restore_app)?;
             } else {
-                restore::run(&path).await?;
+                restore::run(&path, &session_restore_app).await?;
             }
         }
         Commands::Status { file } => {

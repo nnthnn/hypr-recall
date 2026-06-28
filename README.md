@@ -26,6 +26,7 @@ sudo install -Dm755 target/release/hypr-recall /usr/local/bin/hypr-recall
 hypr-recall save                      # snapshot current session
 hypr-recall restore                   # restore saved session
 hypr-recall restore --dry-run         # preview what would be restored
+hypr-recall restore --session-restore-app myapp  # treat myapp as a session-restore app
 hypr-recall status                    # show saved session summary
 hypr-recall edit                      # open session file in $EDITOR
 hypr-recall save --file ~/my-session.json
