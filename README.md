@@ -1,5 +1,7 @@
 # hypr-recall
 
+[![CI](https://github.com/nnthnn/hypr-recall/actions/workflows/ci.yml/badge.svg)](https://github.com/nnthnn/hypr-recall/actions/workflows/ci.yml)
+
 Save and restore Hyprland window sessions, with first-class support for Hyprland's scrolling layout column order and width.
 
 No existing tool restores column positions and widths in scrolling layouts — hypr-recall does.
