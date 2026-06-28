@@ -28,7 +28,7 @@ pub fn run(path: &Path) -> Result<()> {
             Ok(p) => {
                 let s = p.to_string_lossy().into_owned();
                 // Strip " (deleted)" suffix left by package updates
-                s.trim_end_matches(" (deleted)").to_string()
+                s.trim_end_matches(" (deleted)").to_owned()
             }
             Err(_) => continue,
         };
@@ -38,7 +38,7 @@ pub fn run(path: &Path) -> Result<()> {
             .copied()
             .unwrap_or(1920);
 
-        let col_width = (client.width as f64 / monitor_width as f64 * 1000.0).round() / 1000.0;
+        let col_width = (f64::from(client.width) / f64::from(monitor_width) * 1000.0).round() / 1000.0;
 
         rows.push((
             client.workspace_id,

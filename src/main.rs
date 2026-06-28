@@ -28,7 +28,7 @@ enum Commands {
 }
 
 fn default_path() -> PathBuf {
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
+    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_owned());
     PathBuf::from(home).join(".local/share/hypr-recall/session.json")
 }
 

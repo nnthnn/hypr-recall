@@ -1,14 +1,21 @@
 # hypr-recall
 
-Save and restore Hyprland window sessions, with first-class support for [hyprscroller](https://github.com/gudjonragnar/hyprscroller) column order and width.
+Save and restore Hyprland window sessions, with first-class support for Hyprland's scrolling layout column order and width.
 
 No existing tool restores column positions and widths in scrolling layouts — hypr-recall does.
 
 ## Install
 
+**User-local** (no elevated privileges):
 ```fish
 cargo build --release
 cp target/release/hypr-recall ~/.local/bin/
+```
+
+**System-wide:**
+```fish
+cargo build --release
+pkexec install -Dm755 target/release/hypr-recall /usr/local/bin/hypr-recall
 ```
 
 ## Usage
@@ -42,24 +49,43 @@ Floating windows and special workspaces are excluded.
 4. After all windows for a workspace are open: reorder columns to match the saved left-to-right order using `swapcol l` dispatches, then resize each column to its saved width ratio
 5. Finally, refocus the saved active workspace
 
-## Autostart
+## Hyprland config setup
 
-To auto-restore on login and auto-save on logout, add to your Hyprland config:
+### Auto-restore on login
+
+Add to your `hyprland.lua` to restore your session when Hyprland starts:
 
 ```lua
--- Restore session on login (only if no windows are open yet)
 hl.exec("hypr-recall restore")
-
--- Save session before logout
--- (wire this to your logout keybind or shutdown hook)
-hl.exec("hypr-recall save")
 ```
 
-Or with a keybind:
+### Auto-save on shutdown
+
+Hook into Hyprland's shutdown event so the session is always saved on logout — no keybind required:
 
 ```lua
+hl.on("hyprland.shutdown", function()
+    os.execute("hypr-recall save")
+end)
+```
+
+### Periodic autosave
+
+Save every 10 minutes so a crash never loses more than a few minutes of layout work:
+
+```lua
+hl.timer(function()
+    hl.exec("hypr-recall save")
+end, { timeout = 600000, type = "repeat" })
+```
+
+### Manual keybinds
+
+```lua
+hl.bind("SUPER", "F11", "exec", "hypr-recall restore")
 hl.bind("SUPER", "F12", "exec", "hypr-recall save")
 ```
+
 
 ## Session JSON format
 
@@ -88,7 +114,7 @@ hl.bind("SUPER", "F12", "exec", "hypr-recall save")
 ## Requirements
 
 - Hyprland with Lua config
-- [hyprscroller](https://github.com/gudjonragnar/hyprscroller) plugin (for `swapcol` and `colresize`)
+- Hyprland's scrolling layout (for `swapcol` and `colresize`)
 - `hyprctl` in PATH
 - `HYPRLAND_INSTANCE_SIGNATURE` environment variable set (always true inside Hyprland)
 

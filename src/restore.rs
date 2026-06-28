@@ -166,8 +166,7 @@ pub fn plan_column_swaps(saved: &[&str], live: &mut Vec<LiveWindow>) -> Vec<(Str
     let n = saved.len().min(live.len());
     let mut ops = Vec::new();
 
-    for i in 0..n.saturating_sub(1) {
-        let expected = saved[i];
+    for (i, &expected) in saved.iter().enumerate().take(n.saturating_sub(1)) {
         if live[i].class == expected {
             continue;
         }
@@ -263,7 +262,7 @@ mod tests {
         let saved = ["a", "b"];
         let mut live = vec![lw("0x1", "b"), lw("0x2", "a")];
         let ops = plan_column_swaps(&saved, &mut live);
-        assert_eq!(ops, vec![("0x2".to_string(), 1)]);
+        assert_eq!(ops, vec![("0x2".to_owned(), 1)]);
         assert_eq!(classes(&live), saved);
     }
 
@@ -272,7 +271,7 @@ mod tests {
         let saved = ["c", "a", "b"];
         let mut live = vec![lw("0x1", "a"), lw("0x2", "b"), lw("0x3", "c")];
         let ops = plan_column_swaps(&saved, &mut live);
-        assert_eq!(ops, vec![("0x3".to_string(), 2)]);
+        assert_eq!(ops, vec![("0x3".to_owned(), 2)]);
         assert_eq!(classes(&live), saved);
     }
 
