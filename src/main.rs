@@ -28,6 +28,8 @@ enum Commands {
     Restore {
         #[arg(short, long, help = "Path to session file")]
         file: Option<PathBuf>,
+        #[arg(long, help = "Print what would be restored without launching anything")]
+        dry_run: bool,
     },
     Status {
         #[arg(short, long, help = "Path to session file")]
@@ -49,9 +51,13 @@ async fn main() -> Result<()> {
             let path = file.unwrap_or_else(default_path);
             save::run(&path)?;
         }
-        Commands::Restore { file } => {
+        Commands::Restore { file, dry_run } => {
             let path = file.unwrap_or_else(default_path);
-            restore::run(&path).await?;
+            if dry_run {
+                restore::run_dry(&path)?;
+            } else {
+                restore::run(&path).await?;
+            }
         }
         Commands::Status { file } => {
             let path = file.unwrap_or_else(default_path);

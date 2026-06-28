@@ -17,14 +17,16 @@ cp target/release/hypr-recall ~/.local/bin/
 **System-wide:**
 ```fish
 cargo build --release
-pkexec install -Dm755 target/release/hypr-recall /usr/local/bin/hypr-recall
+sudo install -Dm755 target/release/hypr-recall /usr/local/bin/hypr-recall
 ```
 
 ## Usage
 
 ```fish
-hypr-recall save              # snapshot current session
-hypr-recall restore           # restore saved session
+hypr-recall save                      # snapshot current session
+hypr-recall restore                   # restore saved session
+hypr-recall restore --dry-run         # preview what would be restored
+hypr-recall status                    # show saved session summary
 hypr-recall save --file ~/my-session.json
 hypr-recall restore --file ~/my-session.json
 ```
