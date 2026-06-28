@@ -2,6 +2,7 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
+mod edit;
 mod hyprland;
 mod lock;
 mod restore;
@@ -35,6 +36,10 @@ enum Commands {
         #[arg(short, long, help = "Path to session file")]
         file: Option<PathBuf>,
     },
+    Edit {
+        #[arg(short, long, help = "Path to session file")]
+        file: Option<PathBuf>,
+    },
 }
 
 fn default_path() -> PathBuf {
@@ -62,6 +67,10 @@ async fn main() -> Result<()> {
         Commands::Status { file } => {
             let path = file.unwrap_or_else(default_path);
             status::run(&path)?;
+        }
+        Commands::Edit { file } => {
+            let path = file.unwrap_or_else(default_path);
+            edit::run(&path)?;
         }
     }
 
