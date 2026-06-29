@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>hypr-recall & You — A (Mostly True) Story About Windows</title>
+  <meta name="description" content="A whimsical walkthrough of hypr-recall, the Hyprland session restore tool.">
+  <link rel="icon" href="assets/logo-32.png" type="image/png">
+
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #080810;
+      color: #cbd5e1;
+      font-family: Georgia, 'Times New Roman', serif;
+      font-size: 1.65rem;
+      line-height: 1.85;
+      overflow-x: hidden;
+    }
+
+    body::after {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background: repeating-linear-gradient(
+        0deg, transparent, transparent 2px,
+        rgba(0,0,0,0.08) 2px, rgba(0,0,0,0.08) 4px
+      );
+      pointer-events: none;
+      z-index: 999;
+    }
+
+    .bg {
+      position: fixed;
+      inset: 0;
+      background:
+        radial-gradient(ellipse at 10% 60%, rgba(124,58,237,0.12) 0%, transparent 55%),
+        radial-gradient(ellipse at 90% 20%, rgba(249,115,22,0.09) 0%, transparent 55%);
+      z-index: 0;
+      animation: bgpulse 9s ease-in-out infinite alternate;
+    }
+    @keyframes bgpulse { from { opacity:.5; } to { opacity:1; } }
+
+    .container {
+      position: relative;
+      z-index: 1;
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 80px 28px 120px;
+    }
+
+    /* ── Nav ── */
+    .nav {
+      font-family: 'Courier New', monospace;
+      font-size: 1.2rem;
+      color: #334155;
+      margin-bottom: 64px;
+    }
+    .nav a { color: #7c3aed; text-decoration: none; }
+    .nav a:hover { color: #f97316; }
+
+    /* ── Title ── */
+    .title-block { text-align: center; margin-bottom: 72px; }
+
+    .title-block img {
+      width: 80px;
+      margin-bottom: 24px;
+      display: block;
+      margin-left: auto;
+      margin-right: auto;
+      animation: logopulse 3s ease-in-out infinite;
+    }
+    @keyframes logopulse {
+      0%,100% { filter: drop-shadow(0 0 10px rgba(249,115,22,.5)) drop-shadow(0 0 24px rgba(124,58,237,.3)); }
+      50%      { filter: drop-shadow(0 0 22px rgba(249,115,22,.8)) drop-shadow(0 0 48px rgba(124,58,237,.6)); }
+    }
+
+    h1 {
+      font-family: Georgia, serif;
+      font-size: clamp(2.7rem, 7vw, 4.2rem);
+      font-weight: 700;
+      background: linear-gradient(130deg, #f97316 30%, #a855f7 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      line-height: 1.2;
+      margin-bottom: 16px;
+    }
+
+    .subtitle {
+      font-style: italic;
+      color: #475569;
+      font-size: 1.5rem;
+    }
+
+    /* ── Chapter headings ── */
+    h2 {
+      font-family: 'Courier New', monospace;
+      font-size: 1.08rem;
+      text-transform: uppercase;
+      letter-spacing: 0.2em;
+      color: #f97316;
+      margin: 72px 0 24px;
+    }
+
+    h3 {
+      font-size: 1.725rem;
+      color: #e2e8f0;
+      font-weight: 600;
+      margin: 40px 0 12px;
+    }
+
+    /* ── Body text ── */
+    p { margin-bottom: 1.4em; color: #94a3b8; }
+    p + p { }
+
+    strong { color: #e2e8f0; }
+
+    em { color: #64748b; }
+
+    a { color: #a855f7; text-decoration: none; }
+    a:hover { color: #f97316; }
+
+    /* ── Asides ── */
+    .aside {
+      border-left: 2px solid #1e1e3a;
+      padding: 4px 0 4px 20px;
+      margin: 28px 0;
+      color: #475569;
+      font-style: italic;
+      font-size: 1.425rem;
+    }
+    .aside strong { color: #64748b; }
+
+    /* ── Code ── */
+    code {
+      font-family: 'Courier New', monospace;
+      font-size: 0.88em;
+      color: #f97316;
+      background: rgba(249,115,22,0.08);
+      padding: 1px 5px;
+      border-radius: 3px;
+    }
+
+    pre {
+      background: #0c0c18;
+      border: 1px solid #1e1e3a;
+      border-radius: 8px;
+      padding: 20px 22px;
+      margin: 28px 0;
+      overflow-x: auto;
+    }
+    pre::before {
+      content: '⬤  ⬤  ⬤';
+      display: block;
+      color: #2a2a4a;
+      font-size: 0.55rem;
+      margin-bottom: 14px;
+      letter-spacing: 5px;
+    }
+    pre code {
+      background: none;
+      padding: 0;
+      color: #e2e8f0;
+      font-size: 1.2rem;
+      line-height: 2;
+    }
+    .prompt { color: #7c3aed; }          /* shell prompt ▸ */
+    .cmd    { color: #f97316; }          /* commands, JSON keys */
+    .str    { color: #38bdf8; }          /* string values */
+    .num    { color: #a78bfa; }          /* numbers */
+    .cmt    { color: #475569; }          /* comments */
+    .kw     { color: #34d399; }          /* Lua keywords/functions */
+    .hi     { color: #f97316; }          /* legacy alias */
+
+    /* ── Pull quotes ── */
+    blockquote {
+      margin: 40px 0;
+      padding: 0 28px;
+      border-left: 3px solid #a855f7;
+      color: #64748b;
+      font-style: italic;
+      font-size: 1.575rem;
+    }
+
+    /* ── Footnotes ── */
+    .fn { color: #a855f7; font-size: 0.75em; vertical-align: super; cursor: default; }
+
+    .footnotes {
+      margin-top: 80px;
+      padding-top: 32px;
+      border-top: 1px solid #1e1e3a;
+      font-size: 1.23rem;
+      color: #475569;
+    }
+    .footnotes p { color: #475569; font-size: 1.23rem; margin-bottom: 0.8em; }
+
+    /* ── Footer ── */
+    footer {
+      margin-top: 80px;
+      font-family: 'Courier New', monospace;
+      font-size: 1.08rem;
+      color: #1e1e3a;
+      text-align: center;
+      letter-spacing: 0.05em;
+    }
+    footer a { color: #334155; text-decoration: none; }
+    footer a:hover { color: #f97316; }
+
+    /* ── HR ── */
+    hr { border: none; border-top: 1px solid #1a1a2e; margin: 48px 0; }
+
+    .chapter-num {
+      font-family: 'Courier New', monospace;
+      font-size: 4.5rem;
+      color: #1a1a2e;
+      display: block;
+      margin-bottom: -8px;
+    }
+  </style>
+</head>
+<body>
+<div class="bg"></div>
+
+<div class="container">
+
+  <div class="nav">
+    <a href="index.html">← hypr-recall</a>
+  </div>
+
+  <div class="title-block">
+    <img src="assets/logo-transparent.png" alt="hypr-recall">
+    <h1>hypr-recall &amp; You</h1>
+    <p class="subtitle">A (Mostly True) Story About Windows</p>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <span class="chapter-num">01</span>
+  <h2>The Tragedy</h2>
+
+  <p>
+    You had fourteen windows open. They were <strong>perfect</strong>.
+    Firefox on workspace 2 — not because it belongs there, but because
+    that's where you put it three months ago and you have never questioned
+    it since. Three Ghostty terminals in a lovely little row on workspace 1,
+    each one doing something vaguely important. Zed occupying exactly 49.3%
+    of the screen, because you dragged that column divider to precisely the
+    right place and it felt, in that moment, like art.
+  </p>
+
+  <p>
+    Then you restarted Hyprland.
+  </p>
+
+  <p>
+    The windows are gone. Not destroyed — windows don't really die,
+    they simply stop being open. But they are gone all the same.
+    Gone like old friends who moved to another city without leaving
+    a forwarding address. Gone like socks. Gone like the particular
+    energy you had at 2pm last Tuesday.
+  </p>
+
+  <blockquote>
+    "A workspace without its windows is just a number."
+    <br><em>— someone, probably</em>
+  </blockquote>
+
+  <p>
+    This is where <strong>hypr-recall</strong> comes in.
+    hypr-recall is a small Rust program that remembers your windows so
+    you don't have to. It is not magic. It is approximately 800 lines
+    of fairly earnest code and a logo that was generated by an AI
+    and then had its background removed by a different AI.<span class="fn">1</span>
+    But it works.
+  </p>
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <span class="chapter-num">02</span>
+  <h2>The Spell of Saving</h2>
+
+  <p>
+    First, you must <em>save</em>. This is the important part.
+    You cannot restore what was never saved. This is true of sessions,
+    of relationships, and of documents you were editing when the power
+    went out.
+  </p>
+
+  <pre><code><span class="prompt">▸</span> <span class="hi">hypr-recall save</span></code></pre>
+
+  <p>
+    That's it. One command. hypr-recall will ask Hyprland — very politely,
+    via IPC — what windows you have open, where they are, and how wide each
+    column is relative to your monitor. It will write all of this to a small
+    JSON file at <code>~/.local/share/hypr-recall/session.json</code> and
+    then it will stop running, because it is a CLI tool and not a daemon
+    and it has boundaries.
+  </p>
+
+  <div class="aside">
+    <strong>What gets saved:</strong> every tiled, non-floating window on a
+    real workspace. The app class, the executable path, and the column width
+    as a ratio of your monitor width (so 0.493 means "about half"). Windows
+    are stored in left-to-right order within each workspace.
+    <br><br>
+    <strong>What doesn't get saved:</strong> floating windows, special
+    workspaces, the ambient anxiety you carry while working. Some things
+    are beyond the reach of any CLI tool.
+  </div>
+
+  <p>
+    The resulting file looks something like this:
+  </p>
+
+  <pre><code>{
+  <span class="cmd">"version"</span>: <span class="num">1</span>,
+  <span class="cmd">"active_workspace"</span>: <span class="num">2</span>,
+  <span class="cmd">"workspaces"</span>: [
+    {
+      <span class="cmd">"workspace"</span>: <span class="num">1</span>,
+      <span class="cmd">"windows"</span>: [
+        { <span class="cmd">"class"</span>: <span class="str">"com.mitchellh.ghostty"</span>, <span class="cmd">"exe"</span>: <span class="str">"/usr/bin/ghostty"</span>,        <span class="cmd">"col_width"</span>: <span class="num">0.493</span> },
+        { <span class="cmd">"class"</span>: <span class="str">"dev.zed.Zed"</span>,            <span class="cmd">"exe"</span>: <span class="str">"/usr/bin/zed"</span>,           <span class="cmd">"col_width"</span>: <span class="num">0.493</span> },
+        { <span class="cmd">"class"</span>: <span class="str">"com.mitchellh.ghostty"</span>, <span class="cmd">"exe"</span>: <span class="str">"/usr/bin/ghostty"</span>,        <span class="cmd">"col_width"</span>: <span class="num">0.493</span> }
+      ]
+    },
+    {
+      <span class="cmd">"workspace"</span>: <span class="num">2</span>,
+      <span class="cmd">"windows"</span>: [
+        { <span class="cmd">"class"</span>: <span class="str">"firefox"</span>, <span class="cmd">"exe"</span>: <span class="str">"/usr/lib/firefox/firefox"</span>, <span class="cmd">"col_width"</span>: <span class="num">0.989</span> }
+      ]
+    }
+  ]
+}</code></pre>
+
+  <p>
+    You can look at this file. You can edit it. It is just JSON.
+    It will not judge you for opening it in Vim even though you have
+    Zed installed. Use <code>hypr-recall edit</code> to open it
+    in <code>$EDITOR</code> if you'd like the program to judge you
+    on your behalf.
+  </p>
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <span class="chapter-num">03</span>
+  <h2>The Art of Recall</h2>
+
+  <p>
+    Now the fun part. You've restarted. Your screen is empty and a
+    little bleak. You type:
+  </p>
+
+  <pre><code><span class="prompt">▸</span> <span class="hi">hypr-recall restore</span></code></pre>
+
+  <p>
+    hypr-recall reads the session file. Then, with the quiet determination
+    of someone who has a list and intends to follow it, it begins.
+  </p>
+
+  <p>
+    For each workspace: it focuses that workspace, then launches
+    each app in the saved left-to-right order. It doesn't just fire
+    them all off and hope for the best — it <em>waits</em>.
+    Specifically, it subscribes to Hyprland's IPC event socket and
+    listens for <code>openwindow</code> events.<span class="fn">2</span>
+    When your window appears, hypr-recall knows. It is, in this sense,
+    watching.
+  </p>
+
+  <div class="aside">
+    Don't worry about that last sentence. It's fine. It's your own computer.
+  </div>
+
+  <p>
+    Once all the windows for a workspace are open, hypr-recall sorts
+    them into the correct column order using a series of
+    <code>swapcol l</code> dispatches — essentially sliding columns
+    leftward, one by one, until everything lines up.<span class="fn">3</span>
+    Then it resizes each column to its saved width ratio.
+  </p>
+
+  <p>
+    Finally, it focuses whichever workspace you were on when you saved.
+    Then it stops. It has done its job.
+  </p>
+
+  <h3>The dry run, for the anxious</h3>
+
+  <p>
+    If you'd like to know what <em>would</em> happen without committing
+    to the bit, there is <code>--dry-run</code>:
+  </p>
+
+  <pre><code><span class="prompt">▸</span> <span class="hi">hypr-recall restore --dry-run</span>
+
+  workspace 1 (3 windows)
+    com.mitchellh.ghostty            → launch 2
+    dev.zed.Zed                      → launch 1
+
+  workspace 2 (1 window)  ← active
+    firefox                          → skip (1 already open)</code></pre>
+
+  <p>
+    Note that Firefox was already open, so hypr-recall would skip it.
+    hypr-recall is not in the business of opening duplicate windows.
+    There are enough of those already.
+  </p>
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <span class="chapter-num">04</span>
+  <h2>Special Cases & Strange Apps</h2>
+
+  <p>
+    Some applications — Firefox, Zed, Chromium — do not open
+    a blank window when launched. They look at their saved state,
+    sigh contentedly, and restore their own previous session.
+    This is called being a <strong>session-restore app</strong>,
+    and it is both a blessing and a source of subtle confusion.
+  </p>
+
+  <p>
+    The confusion: if you launch Firefox twice, you don't get
+    two Firefoxes. You get one Firefox, mildly bewildered,
+    possibly with a "Firefox is already running" dialog.
+    Firefox is a singleton. It has opinions about this.
+  </p>
+
+  <p>
+    hypr-recall knows about this. For session-restore apps, it
+    launches once and then waits for however many windows the app
+    decides to open on its own — up to 20 seconds.<span class="fn">4</span>
+    If your app closes immediately after launching
+    (which is what happens when a second instance hands off
+    to the first), hypr-recall notices and extends the wait.
+    This is called single-instance handoff detection and it works
+    most of the time, which is as much as you can ask of anything.
+  </p>
+
+  <p>
+    If you have an app that behaves this way but isn't on
+    hypr-recall's built-in list, you can tell it:
+  </p>
+
+  <pre><code><span class="prompt">▸</span> <span class="hi">hypr-recall restore --session-restore-app my.special.App</span></code></pre>
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <span class="chapter-num">05</span>
+  <h2>Making It Automatic</h2>
+
+  <p>
+    The most useful version of hypr-recall is one you never
+    have to think about. Put this in your <code>hyprland.lua</code>:
+  </p>
+
+  <pre><code><span class="cmt">-- restore on login</span>
+<span class="kw">hl.exec</span>(<span class="str">"hypr-recall restore"</span>)
+
+<span class="cmt">-- save on shutdown, so you never lose more than the current session</span>
+<span class="kw">hl.on</span>(<span class="str">"hyprland.shutdown"</span>, function()
+    os.execute(<span class="str">"hypr-recall save"</span>)
+end)
+
+<span class="cmt">-- optional: save every 10 minutes, for the paranoid (affectionately)</span>
+<span class="kw">hl.timer</span>(function()
+    <span class="kw">hl.exec</span>(<span class="str">"hypr-recall save"</span>)
+end, { timeout = <span class="num">600000</span>, type = <span class="str">"repeat"</span> })</code></pre>
+
+  <p>
+    With this configuration, hypr-recall runs quietly in the background
+    of your life, watching over your workspaces with the calm vigilance
+    of a library cat. You will forget it exists. And then one day
+    Hyprland will crash — perhaps because you were compiling something
+    ambitious, perhaps for reasons unknown to science — and when you
+    log back in, everything will be where you left it.
+  </p>
+
+  <p>
+    You will feel, briefly, that the universe is on your side.
+  </p>
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <span class="chapter-num">06</span>
+  <h2>Advanced Spellwork</h2>
+
+  <h3>Per-app launch arguments</h3>
+
+  <p>
+    Some apps need a little extra coaxing. A flag here, a profile path there.
+    You can add a <code>launch_args</code> array to any window entry
+    in the session file:
+  </p>
+
+  <pre><code>{
+  <span class="cmd">"class"</span>: <span class="str">"firefox"</span>,
+  <span class="cmd">"exe"</span>: <span class="str">"/usr/lib/firefox/firefox"</span>,
+  <span class="cmd">"launch_args"</span>: [<span class="str">"--profile"</span>, <span class="str">"~/.mozilla/work"</span>],
+  <span class="cmd">"col_width"</span>: <span class="num">0.989</span>
+}</code></pre>
+
+  <p>
+    Edit the file once with <code>hypr-recall edit</code>.
+    Every subsequent restore will pass those arguments.
+    hypr-recall does not question why you need four Firefox profiles.
+    It simply obeys.
+  </p>
+
+  <h3>Checking on things</h3>
+
+  <p>
+    At any moment you can ask hypr-recall what it knows:
+  </p>
+
+  <pre><code><span class="prompt">▸</span> <span class="hi">hypr-recall status</span>
+
+  session saved 3 hours ago
+  3 workspaces · 8 windows
+
+  workspace 1 (3 windows)
+    ghostty    49%  49%  49%
+  workspace 2 (4 windows)  ← active
+    firefox    99%
+    zed        49%  60%
+  workspace 3 (1 window)
+    ghostty    99%</code></pre>
+
+  <p>
+    The percentages are column widths. 99% means "basically fullscreen,
+    but Hyprland insists on keeping a small gap because it has principles."
+  </p>
+
+  <!-- ═══════════════════════════════════════════════════ -->
+
+  <hr>
+
+  <p style="color: #475569; font-style: italic; text-align: center; font-size: 0.95rem;">
+    And that, more or less, is everything.<br>
+    Go save your session. Right now. Before you forget.
+  </p>
+
+  <div class="footnotes">
+    <p><strong>1.</strong> The background was removed by <a href="https://remove.bg">remove.bg</a>,
+    which is a website that exists for exactly this purpose and does it remarkably well.
+    We tried ImageMagick first. The edges were not good.</p>
+
+    <p><strong>2.</strong> This means hypr-recall never polls. It just listens.
+    No sleep loops, no arbitrary delays, no praying. Just clean IPC.
+    This is considered a virtue in systems programming and also in
+    waiting rooms.</p>
+
+    <p><strong>3.</strong> This is insertion sort, technically.
+    But "insertion sort" doesn't sound nearly as interesting as
+    "sliding columns leftward, one by one."</p>
+
+    <p><strong>4.</strong> Twenty seconds is a long time. If your app
+    hasn't appeared in twenty seconds, something has gone wrong that
+    is probably not hypr-recall's fault, but hypr-recall will tell you
+    about it anyway.</p>
+  </div>
+
+  <footer>
+    <a href="index.html">← back to hypr-recall</a>
+    &nbsp;·&nbsp;
+    written with Claude Sonnet 4.6
+    &nbsp;·&nbsp;
+    <a href="https://github.com/nnthnn/hypr-recall">github</a>
+  </footer>
+
+</div>
+</body>
+</html>
