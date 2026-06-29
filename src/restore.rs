@@ -160,6 +160,8 @@ pub async fn run(path: &Path, extra_restore_apps: &[String]) -> Result<()> {
         reorder_columns(ws_id, ws_entry).await?;
     }
 
+    fix_stray_windows(&session).await?;
+
     hyprland::focus_workspace(session.active_workspace)?;
     println!("hypr-recall: restore complete");
     Ok(())
@@ -281,6 +283,56 @@ pub fn plan_column_swaps(saved: &[&str], live: &mut Vec<LiveWindow>) -> Vec<(Str
     }
 
     ops
+}
+
+/// After all workspaces are restored, some apps (e.g. Discord) open late windows
+/// that land on the wrong workspace because focus has already moved on. Walk every
+/// live client: if its class belongs to a workspace in the session and it ended up
+/// somewhere else, silently move it to the expected workspace.
+async fn fix_stray_windows(session: &crate::session::Session) -> Result<()> {
+    // Wait for late-opening windows (e.g. Discord Friends sidebar) to appear
+    // before we sweep. Without this, the sweep runs before Discord finishes.
+    sleep(Duration::from_secs(4)).await;
+
+    // Build class → [expected workspace ids] from the saved session.
+    // A class can appear on multiple workspaces (e.g. ghostty on ws2); each
+    // unique workspace is recorded once, in session order.
+    let mut class_to_ws: HashMap<String, Vec<i32>> = HashMap::new();
+    for ws_entry in &session.workspaces {
+        for win in &ws_entry.windows {
+            let workspaces = class_to_ws.entry(win.class.clone()).or_default();
+            if !workspaces.contains(&ws_entry.workspace) {
+                workspaces.push(ws_entry.workspace);
+            }
+        }
+    }
+
+    let clients = hyprland::get_clients()?;
+    let mut moved = 0usize;
+
+    for client in &clients {
+        let Some(valid_workspaces) = class_to_ws.get(&client.initial_class) else {
+            continue;
+        };
+        if valid_workspaces.contains(&client.workspace_id) {
+            continue;
+        }
+        // Window is on a workspace it doesn't belong to — move it silently.
+        let target = valid_workspaces[0];
+        println!(
+            "  fix: {} strayed to ws{} → moving to ws{target}",
+            client.initial_class, client.workspace_id
+        );
+        hyprland::move_to_workspace_silent(&client.address, target)?;
+        sleep(Duration::from_millis(100)).await;
+        moved += 1;
+    }
+
+    if moved > 0 {
+        println!("hypr-recall: moved {moved} stray window(s) to correct workspace(s)");
+    }
+
+    Ok(())
 }
 
 async fn reorder_columns(ws_id: i32, ws_entry: &crate::session::WorkspaceEntry) -> Result<()> {

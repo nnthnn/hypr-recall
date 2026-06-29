@@ -131,6 +131,13 @@ pub fn focus_window(address: &str) -> Result<()> {
     Ok(())
 }
 
+pub fn move_to_workspace_silent(address: &str, workspace_id: i32) -> Result<()> {
+    dispatch(&format!(
+        "hl.dsp.window.move({{workspace = {workspace_id}, follow = false, window = \"address:{address}\"}})"
+    ))?;
+    Ok(())
+}
+
 pub fn swapcol_left() -> Result<()> {
     dispatch("hl.dsp.layout(\"swapcol l\")")?;
     Ok(())
@@ -310,9 +317,11 @@ impl EventStream {
     }
 
     fn update_stable(open: &HashSet<String>, target: usize, stable_since: &mut Option<Instant>) {
-        if open.len() >= target {
+        if open.len() == target {
             stable_since.get_or_insert_with(Instant::now);
         } else {
+            // Above OR below target — reset. When above target a splash window is still
+            // open; the timer must not start until the net count settles exactly at target.
             *stable_since = None;
         }
     }
@@ -352,6 +361,29 @@ mod tests {
     fn ignores_unrecognised_events() {
         assert!(parse_event_line("activewindow>>firefox,Firefox").is_none());
         assert!(parse_event_line("").is_none());
+    }
+
+    #[test]
+    fn update_stable_resets_when_above_target() {
+        // Simulates Discord: splash opens (net=1=target), real window opens (net=2>target),
+        // splash closes (net=1=target again). Timer must NOT fire while net is above target.
+        let mut open: HashSet<String> = HashSet::new();
+        let mut stable_since: Option<Instant> = None;
+
+        open.insert("splash".into());
+        EventStream::update_stable(&open, 1, &mut stable_since);
+        assert!(stable_since.is_some(), "timer should start at net=1=target");
+
+        open.insert("real".into());
+        EventStream::update_stable(&open, 1, &mut stable_since);
+        assert!(stable_since.is_none(), "timer must reset when net=2>target");
+
+        open.remove("splash");
+        EventStream::update_stable(&open, 1, &mut stable_since);
+        assert!(
+            stable_since.is_some(),
+            "timer should restart after splash closes (net=1=target)"
+        );
     }
 
     #[test]
