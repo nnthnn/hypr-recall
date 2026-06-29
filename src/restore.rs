@@ -5,6 +5,7 @@ use std::process::Stdio;
 use std::time::{Duration, Instant};
 use tokio::time::sleep;
 
+use crate::config::Config;
 use crate::hyprland::{self, EventStream};
 use crate::lock::LockGuard;
 use crate::session::Session;
@@ -22,10 +23,6 @@ const SESSION_RESTORE_APPS: &[&str] = &[
     "discord",
 ];
 
-fn is_restore_app(class: &str, extra: &[String]) -> bool {
-    SESSION_RESTORE_APPS.contains(&class) || extra.iter().any(|e| e == class)
-}
-
 fn spawn_overlay() -> Option<tokio::process::Child> {
     let mut path = std::env::current_exe().ok()?;
     path.set_file_name("hypr-recall-overlay");
@@ -40,7 +37,7 @@ fn spawn_overlay() -> Option<tokio::process::Child> {
         .ok()
 }
 
-pub async fn run(path: &Path, extra_restore_apps: &[String]) -> Result<()> {
+pub async fn run(path: &Path, extra_restore_apps: &[String], cfg: &Config) -> Result<()> {
     if !path.exists() {
         eprintln!(
             "hypr-recall: no session file at {} — run 'hypr-recall save' first",
@@ -117,9 +114,9 @@ pub async fn run(path: &Path, extra_restore_apps: &[String]) -> Result<()> {
                 "  {class}: saved={saved_count} pre={pre} needed={needed} before={before_total}"
             );
 
-            let launch_args = window.launch_args.as_deref().unwrap_or(&[]);
+            let launch_args = cfg.launch_args(class, window.launch_args.as_ref());
 
-            if is_restore_app(class, extra_restore_apps) {
+            if cfg.is_session_restore_app(class, SESSION_RESTORE_APPS, extra_restore_apps) {
                 // Launch once; the app restores all its windows itself
                 let mut child = tokio::process::Command::new(exe)
                     .args(launch_args)
@@ -175,7 +172,7 @@ pub async fn run(path: &Path, extra_restore_apps: &[String]) -> Result<()> {
         reorder_columns(ws_id, ws_entry).await?;
     }
 
-    fix_stray_windows(&session).await?;
+    fix_stray_windows(&session, cfg.settle_delay_secs).await?;
 
     if let Some(ref mut child) = overlay {
         let _ = child.kill().await;
@@ -186,7 +183,7 @@ pub async fn run(path: &Path, extra_restore_apps: &[String]) -> Result<()> {
     Ok(())
 }
 
-pub fn run_dry(path: &Path, extra_restore_apps: &[String]) -> Result<()> {
+pub fn run_dry(path: &Path, extra_restore_apps: &[String], cfg: &Config) -> Result<()> {
     if !path.exists() {
         eprintln!(
             "hypr-recall: no session file at {} — run 'hypr-recall save' first",
@@ -239,14 +236,16 @@ pub fn run_dry(path: &Path, extra_restore_apps: &[String]) -> Result<()> {
             let pre = pre_existing.get(class).copied().unwrap_or(0);
             let needed = saved_count.saturating_sub(pre);
 
-            let args_suffix = match &window.launch_args {
-                Some(args) if !args.is_empty() => format!(" [args: {}]", args.join(" ")),
-                _ => String::new(),
+            let launch_args = cfg.launch_args(class, window.launch_args.as_ref());
+            let args_suffix = if launch_args.is_empty() {
+                String::new()
+            } else {
+                format!(" [args: {}]", launch_args.join(" "))
             };
 
             if needed == 0 {
                 println!("    {class:<40} → skip ({pre} already open)");
-            } else if is_restore_app(class, extra_restore_apps) {
+            } else if cfg.is_session_restore_app(class, SESSION_RESTORE_APPS, extra_restore_apps) {
                 println!(
                     "    {class:<40} → launch 1  [session-restore, waits for {needed} window{}]{args_suffix}",
                     if needed == 1 { "" } else { "s" }
@@ -308,10 +307,10 @@ pub fn plan_column_swaps(saved: &[&str], live: &mut Vec<LiveWindow>) -> Vec<(Str
 /// that land on the wrong workspace because focus has already moved on. Walk every
 /// live client: if its class belongs to a workspace in the session and it ended up
 /// somewhere else, silently move it to the expected workspace.
-async fn fix_stray_windows(session: &crate::session::Session) -> Result<()> {
+async fn fix_stray_windows(session: &crate::session::Session, settle_secs: u64) -> Result<()> {
     // Wait for late-opening windows (e.g. Discord Friends sidebar) to appear
     // before we sweep. Without this, the sweep runs before Discord finishes.
-    sleep(Duration::from_secs(4)).await;
+    sleep(Duration::from_secs(settle_secs)).await;
 
     // Build class → [expected workspace ids] from the saved session.
     // A class can appear on multiple workspaces (e.g. ghostty on ws2); each

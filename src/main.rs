@@ -2,6 +2,7 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
+mod config;
 mod edit;
 mod hyprland;
 mod lock;
@@ -58,6 +59,8 @@ fn default_path() -> PathBuf {
 async fn main() -> Result<()> {
     let cli = Cli::parse();
 
+    let cfg = config::Config::load()?;
+
     match cli.command {
         Commands::Save { file } => {
             let path = file.unwrap_or_else(default_path);
@@ -70,9 +73,9 @@ async fn main() -> Result<()> {
         } => {
             let path = file.unwrap_or_else(default_path);
             if dry_run {
-                restore::run_dry(&path, &session_restore_app)?;
+                restore::run_dry(&path, &session_restore_app, &cfg)?;
             } else {
-                restore::run(&path, &session_restore_app).await?;
+                restore::run(&path, &session_restore_app, &cfg).await?;
             }
         }
         Commands::Status { file } => {
