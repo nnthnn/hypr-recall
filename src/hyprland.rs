@@ -1,11 +1,16 @@
 use anyhow::{Context, Result};
 use serde::Deserialize;
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
 use std::process::Command;
 use std::time::{Duration, Instant};
 use tokio::io::AsyncBufReadExt;
 use tokio::net::UnixStream;
 use tokio::sync::mpsc;
+
+/// How long the net window count must stay at `target` without a close event
+/// before we declare success. Catches apps like Discord that open a splash/updater
+/// window first (which fires openwindow), then close it once the real window appears.
+const STABILITY_WINDOW: Duration = Duration::from_millis(500);
 
 #[derive(Debug, Clone)]
 pub struct HyprClient {
@@ -126,6 +131,13 @@ pub fn focus_window(address: &str) -> Result<()> {
     Ok(())
 }
 
+pub fn move_to_workspace_silent(address: &str, workspace_id: i32) -> Result<()> {
+    dispatch(&format!(
+        "hl.dsp.window.move({{workspace = {workspace_id}, follow = false, window = \"address:{address}\"}})"
+    ))?;
+    Ok(())
+}
+
 pub fn swapcol_left() -> Result<()> {
     dispatch("hl.dsp.layout(\"swapcol l\")")?;
     Ok(())
@@ -149,11 +161,12 @@ fn socket2_path() -> Result<String> {
 }
 
 #[derive(Debug, Clone)]
-pub struct WindowOpenEvent {
-    pub class: String,
+pub enum HyprEvent {
+    WindowOpen { address: String, class: String },
+    WindowClose { address: String },
 }
 
-pub async fn subscribe_openwindow() -> Result<mpsc::Receiver<WindowOpenEvent>> {
+pub async fn subscribe_events() -> Result<mpsc::Receiver<HyprEvent>> {
     let path = socket2_path()?;
     let stream = UnixStream::connect(&path)
         .await
@@ -163,7 +176,7 @@ pub async fn subscribe_openwindow() -> Result<mpsc::Receiver<WindowOpenEvent>> {
     tokio::spawn(async move {
         let mut reader = tokio::io::BufReader::new(stream).lines();
         while let Ok(Some(line)) = reader.next_line().await {
-            if let Some(ev) = parse_openwindow_line(&line) {
+            if let Some(ev) = parse_event_line(&line) {
                 if tx.send(ev).await.is_err() {
                     break;
                 }
@@ -174,61 +187,86 @@ pub async fn subscribe_openwindow() -> Result<mpsc::Receiver<WindowOpenEvent>> {
     Ok(rx)
 }
 
-fn parse_openwindow_line(line: &str) -> Option<WindowOpenEvent> {
-    let data = line.strip_prefix("openwindow>>")?;
-    let mut parts = data.splitn(4, ',');
-    let _addr_hex = parts.next()?;
-    let _workspace = parts.next()?;
-    let class = parts.next()?.to_owned();
-    Some(WindowOpenEvent { class })
+fn parse_event_line(line: &str) -> Option<HyprEvent> {
+    if let Some(data) = line.strip_prefix("openwindow>>") {
+        let mut parts = data.splitn(4, ',');
+        let address = parts.next()?.to_owned();
+        let _workspace = parts.next()?;
+        let class = parts.next()?.to_owned();
+        Some(HyprEvent::WindowOpen { address, class })
+    } else {
+        line.strip_prefix("closewindow>>")
+            .map(|address| HyprEvent::WindowClose {
+                address: address.to_owned(),
+            })
+    }
 }
 
 pub struct EventStream {
-    rx: mpsc::Receiver<WindowOpenEvent>,
-    buffer: VecDeque<WindowOpenEvent>,
+    rx: mpsc::Receiver<HyprEvent>,
+    buffer: VecDeque<HyprEvent>,
 }
 
 impl EventStream {
-    pub fn new(rx: mpsc::Receiver<WindowOpenEvent>) -> Self {
+    pub fn new(rx: mpsc::Receiver<HyprEvent>) -> Self {
         Self {
             rx,
             buffer: VecDeque::new(),
         }
     }
 
-    /// Wait until `target_total` cumulative openwindow events for `class` have been
-    /// received, or until `deadline` passes. Returns how many events were received.
+    /// Wait until the net count of open windows for `class` reaches `target_count`
+    /// and remains stable for `STABILITY_WINDOW`, or until `deadline` passes.
+    ///
+    /// Tracks both openwindow and closewindow events so that apps like Discord —
+    /// which open a splash/updater window first — are handled correctly: the splash
+    /// opens (net=1), the real window opens (net=2), the splash closes (net=1, timer
+    /// resets), then stability passes and we declare done.
+    ///
+    /// Returns the net window count at the time we stopped waiting.
     pub async fn wait_for_count(
         &mut self,
         class: &str,
         target_count: usize,
         deadline: Instant,
-        // Optional child process to monitor for single-instance handoff detection
         mut child: Option<&mut tokio::process::Child>,
     ) -> usize {
-        let mut found = 0;
+        // Addresses of currently-open windows of `class` that we've tracked.
+        let mut open_addresses: HashSet<String> = HashSet::new();
+        let mut stable_since: Option<Instant> = None;
         let mut child_done = child.is_none();
         let mut hard_deadline = deadline;
-
-        // We need to handle the child separately since we can't hold two mutable borrows
-        // in select!. Use a flag-based approach with try_wait.
         let spawn_time = Instant::now();
 
-        while found < target_count {
+        loop {
             let now = Instant::now();
             if now >= hard_deadline {
                 break;
             }
+
+            // Declare done once the net count has been stable at target long enough.
+            if let Some(since) = stable_since {
+                if now.duration_since(since) >= STABILITY_WINDOW {
+                    break;
+                }
+            }
+
             let remaining = hard_deadline - now;
 
-            // Check buffer first
-            if let Some(pos) = self.buffer.iter().position(|e| e.class == class) {
-                self.buffer.remove(pos);
-                found += 1;
+            // Drain buffered open events for our class first.
+            if let Some(pos) = self
+                .buffer
+                .iter()
+                .position(|e| matches!(e, HyprEvent::WindowOpen { class: c, .. } if c == class))
+            {
+                if let Some(HyprEvent::WindowOpen { address, .. }) = self.buffer.remove(pos) {
+                    open_addresses.insert(address);
+                    Self::update_stable(&open_addresses, target_count, &mut stable_since);
+                }
                 continue;
             }
 
-            // Check child exit (non-blocking) for handoff detection
+            // Check child exit for single-instance handoff detection.
             if !child_done {
                 if let Some(ch) = child.as_deref_mut() {
                     if let Ok(Some(_)) = ch.try_wait() {
@@ -245,22 +283,47 @@ impl EventStream {
                 }
             }
 
-            match tokio::time::timeout(remaining.min(Duration::from_millis(100)), self.rx.recv())
+            match tokio::time::timeout(remaining.min(Duration::from_millis(50)), self.rx.recv())
                 .await
             {
-                Ok(Some(ev)) => {
-                    if ev.class == class {
-                        found += 1;
+                Ok(Some(HyprEvent::WindowOpen {
+                    address,
+                    class: ev_class,
+                })) => {
+                    if ev_class == class {
+                        open_addresses.insert(address.clone());
+                        Self::update_stable(&open_addresses, target_count, &mut stable_since);
                     } else {
-                        self.buffer.push_back(ev);
+                        self.buffer.push_back(HyprEvent::WindowOpen {
+                            address,
+                            class: ev_class,
+                        });
                     }
                 }
-                Ok(None) => break, // channel closed
-                Err(_) => {}       // timeout — loop to re-check child and deadline
+                Ok(Some(HyprEvent::WindowClose { address })) => {
+                    if open_addresses.remove(&address) {
+                        // A tracked window closed — reset stability and re-evaluate.
+                        stable_since = None;
+                        Self::update_stable(&open_addresses, target_count, &mut stable_since);
+                    }
+                    // Close events for untracked windows are irrelevant; don't buffer them.
+                }
+                Ok(None) => break,
+                Err(_) => {}
             }
         }
 
-        found
+        open_addresses.len()
+    }
+
+    fn update_stable(open: &HashSet<String>, target: usize, stable_since: &mut Option<Instant>) {
+        if open.len() == target {
+            stable_since.get_or_insert_with(Instant::now);
+        } else {
+            // Above OR below target — reset. When above target a splash window is still
+            // open; the timer must not start until the net count settles exactly at target.
+            *stable_since = None;
+        }
     }
 }
 
@@ -270,26 +333,62 @@ mod tests {
 
     #[test]
     fn parses_openwindow_event() {
-        let ev = parse_openwindow_line("openwindow>>0xdeadbeef,1,firefox,Mozilla Firefox").unwrap();
-        assert_eq!(ev.class, "firefox");
+        let ev = parse_event_line("openwindow>>0xdeadbeef,1,firefox,Mozilla Firefox").unwrap();
+        assert!(matches!(ev, HyprEvent::WindowOpen { ref class, .. } if class == "firefox"));
+    }
+
+    #[test]
+    fn parses_openwindow_captures_address() {
+        let ev = parse_event_line("openwindow>>0xdeadbeef,1,firefox,Mozilla Firefox").unwrap();
+        assert!(matches!(ev, HyprEvent::WindowOpen { ref address, .. } if address == "0xdeadbeef"));
     }
 
     #[test]
     fn parses_dotted_class_name() {
-        let ev = parse_openwindow_line("openwindow>>0x1,2,com.mitchellh.ghostty,Ghostty").unwrap();
-        assert_eq!(ev.class, "com.mitchellh.ghostty");
+        let ev = parse_event_line("openwindow>>0x1,2,com.mitchellh.ghostty,Ghostty").unwrap();
+        assert!(
+            matches!(ev, HyprEvent::WindowOpen { ref class, .. } if class == "com.mitchellh.ghostty")
+        );
     }
 
     #[test]
-    fn ignores_non_openwindow_events() {
-        assert!(parse_openwindow_line("closewindow>>0xdeadbeef").is_none());
-        assert!(parse_openwindow_line("activewindow>>firefox,Firefox").is_none());
-        assert!(parse_openwindow_line("").is_none());
+    fn parses_closewindow_event() {
+        let ev = parse_event_line("closewindow>>0xdeadbeef").unwrap();
+        assert!(matches!(ev, HyprEvent::WindowClose { ref address } if address == "0xdeadbeef"));
+    }
+
+    #[test]
+    fn ignores_unrecognised_events() {
+        assert!(parse_event_line("activewindow>>firefox,Firefox").is_none());
+        assert!(parse_event_line("").is_none());
+    }
+
+    #[test]
+    fn update_stable_resets_when_above_target() {
+        // Simulates Discord: splash opens (net=1=target), real window opens (net=2>target),
+        // splash closes (net=1=target again). Timer must NOT fire while net is above target.
+        let mut open: HashSet<String> = HashSet::new();
+        let mut stable_since: Option<Instant> = None;
+
+        open.insert("splash".into());
+        EventStream::update_stable(&open, 1, &mut stable_since);
+        assert!(stable_since.is_some(), "timer should start at net=1=target");
+
+        open.insert("real".into());
+        EventStream::update_stable(&open, 1, &mut stable_since);
+        assert!(stable_since.is_none(), "timer must reset when net=2>target");
+
+        open.remove("splash");
+        EventStream::update_stable(&open, 1, &mut stable_since);
+        assert!(
+            stable_since.is_some(),
+            "timer should restart after splash closes (net=1=target)"
+        );
     }
 
     #[test]
     fn title_with_commas_doesnt_affect_class() {
-        let ev = parse_openwindow_line("openwindow>>0x1,1,firefox,Page, with, commas").unwrap();
-        assert_eq!(ev.class, "firefox");
+        let ev = parse_event_line("openwindow>>0x1,1,firefox,Page, with, commas").unwrap();
+        assert!(matches!(ev, HyprEvent::WindowOpen { ref class, .. } if class == "firefox"));
     }
 }
