@@ -1,6 +1,8 @@
-use anyhow::Result;
+use anyhow::{bail, Result};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
+
+pub const SESSION_VERSION: u32 = 1;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct WindowEntry {
@@ -17,6 +19,8 @@ pub struct WorkspaceEntry {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Session {
+    #[serde(default)]
+    pub version: u32,
     pub active_workspace: i32,
     pub workspaces: Vec<WorkspaceEntry>,
 }
@@ -24,7 +28,16 @@ pub struct Session {
 impl Session {
     pub fn load(path: &Path) -> Result<Self> {
         let text = std::fs::read_to_string(path)?;
-        Ok(serde_json::from_str(&text)?)
+        let session: Self = serde_json::from_str(&text)?;
+        if session.version != SESSION_VERSION {
+            bail!(
+                "session file version {} is not supported (current format is version {})\n\
+                 Run 'hypr-recall save' to create a new session file.",
+                session.version,
+                SESSION_VERSION
+            );
+        }
+        Ok(session)
     }
 
     pub fn save_to(&self, path: &Path) -> Result<()> {
@@ -44,6 +57,7 @@ mod tests {
 
     fn sample() -> Session {
         Session {
+            version: SESSION_VERSION,
             active_workspace: 2,
             workspaces: vec![
                 WorkspaceEntry {
@@ -95,5 +109,27 @@ mod tests {
     fn missing_file_errors() {
         let path = std::env::temp_dir().join("hypr-recall-test-nonexistent-xyz.json");
         assert!(Session::load(&path).is_err());
+    }
+
+    #[test]
+    fn wrong_version_errors() {
+        let path = std::env::temp_dir().join("hypr-recall-test-version.json");
+        std::fs::write(
+            &path,
+            r#"{"version":99,"active_workspace":1,"workspaces":[]}"#,
+        )
+        .unwrap();
+        let err = Session::load(&path).unwrap_err();
+        assert!(err.to_string().contains("version 99"));
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn missing_version_field_errors() {
+        let path = std::env::temp_dir().join("hypr-recall-test-no-version.json");
+        std::fs::write(&path, r#"{"active_workspace":1,"workspaces":[]}"#).unwrap();
+        let err = Session::load(&path).unwrap_err();
+        assert!(err.to_string().contains("version 0"));
+        std::fs::remove_file(&path).ok();
     }
 }

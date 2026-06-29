@@ -77,6 +77,7 @@ pub fn run(path: &Path) -> Result<()> {
     let total_windows: usize = workspaces.iter().map(|ws| ws.windows.len()).sum();
 
     let session = Session {
+        version: crate::session::SESSION_VERSION,
         active_workspace,
         workspaces,
     };
