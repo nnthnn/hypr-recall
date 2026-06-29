@@ -19,6 +19,7 @@ const SESSION_RESTORE_APPS: &[&str] = &[
     "chromium",
     "google-chrome",
     "brave-browser",
+    "discord",
 ];
 
 fn is_restore_app(class: &str, extra: &[String]) -> bool {
@@ -50,7 +51,7 @@ pub async fn run(path: &Path, extra_restore_apps: &[String]) -> Result<()> {
     };
 
     // Subscribe to openwindow events before launching anything (avoids race)
-    let rx = hyprland::subscribe_openwindow().await?;
+    let rx = hyprland::subscribe_events().await?;
     let mut events = EventStream::new(rx);
 
     for ws_entry in &session.workspaces {
