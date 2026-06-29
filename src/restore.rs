@@ -26,6 +26,20 @@ fn is_restore_app(class: &str, extra: &[String]) -> bool {
     SESSION_RESTORE_APPS.contains(&class) || extra.iter().any(|e| e == class)
 }
 
+fn spawn_overlay() -> Option<tokio::process::Child> {
+    let mut path = std::env::current_exe().ok()?;
+    path.set_file_name("hypr-recall-overlay");
+    if !path.exists() {
+        return None;
+    }
+    tokio::process::Command::new(path)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .ok()
+}
+
 pub async fn run(path: &Path, extra_restore_apps: &[String]) -> Result<()> {
     if !path.exists() {
         eprintln!(
@@ -36,6 +50,7 @@ pub async fn run(path: &Path, extra_restore_apps: &[String]) -> Result<()> {
     }
 
     let session = Session::load(path)?;
+    let mut overlay = spawn_overlay();
 
     let lock_path = path.with_file_name("restore.lock");
     let _lock = LockGuard::acquire(lock_path)?;
@@ -161,6 +176,10 @@ pub async fn run(path: &Path, extra_restore_apps: &[String]) -> Result<()> {
     }
 
     fix_stray_windows(&session).await?;
+
+    if let Some(ref mut child) = overlay {
+        let _ = child.kill().await;
+    }
 
     hyprland::focus_workspace(session.active_workspace)?;
     println!("hypr-recall: restore complete");
