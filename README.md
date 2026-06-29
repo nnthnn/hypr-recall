@@ -10,7 +10,9 @@
 
 Save and restore Hyprland window sessions, with first-class support for Hyprland's scrolling layout column order and width.
 
-No existing tool restores column positions and widths in scrolling layouts — hypr-recall does.
+No existing tool restores column positions and widths in scrolling layouts — hypr-recall does.\*
+
+> *Your columns were exactly where you left them. Probably.*
 
 ## Install
 
@@ -135,3 +137,7 @@ hl.bind("SUPER", "F12", "exec", "hypr-recall save")
 - Floating windows are not saved or restored
 - Apps that don't support being relaunched to a specific file/state will open a blank window (this is inherent to any session restore tool)
 - Firefox and similar session-restore apps will open their previously saved session, not necessarily the same tabs as when `hypr-recall save` was run
+
+---
+
+*\* as far as Claude Sonnet 4.6 could tell*
