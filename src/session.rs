@@ -114,7 +114,11 @@ mod tests {
     #[test]
     fn wrong_version_errors() {
         let path = std::env::temp_dir().join("hypr-recall-test-version.json");
-        std::fs::write(&path, r#"{"version":99,"active_workspace":1,"workspaces":[]}"#).unwrap();
+        std::fs::write(
+            &path,
+            r#"{"version":99,"active_workspace":1,"workspaces":[]}"#,
+        )
+        .unwrap();
         let err = Session::load(&path).unwrap_err();
         assert!(err.to_string().contains("version 99"));
         std::fs::remove_file(&path).ok();
