@@ -44,6 +44,7 @@ pub fn run(path: &Path) -> Result<()> {
             WindowEntry {
                 class: client.initial_class.clone(),
                 exe,
+                launch_args: None,
                 col_width,
             },
         ));

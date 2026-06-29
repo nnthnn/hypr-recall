@@ -8,6 +8,8 @@ pub const SESSION_VERSION: u32 = 1;
 pub struct WindowEntry {
     pub class: String,
     pub exe: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub launch_args: Option<Vec<String>>,
     pub col_width: f64,
 }
 
@@ -66,11 +68,13 @@ mod tests {
                         WindowEntry {
                             class: "firefox".into(),
                             exe: "/usr/lib/firefox/firefox".into(),
+                            launch_args: None,
                             col_width: 0.989,
                         },
                         WindowEntry {
                             class: "com.mitchellh.ghostty".into(),
                             exe: "/usr/bin/ghostty".into(),
+                            launch_args: None,
                             col_width: 0.493,
                         },
                     ],
@@ -80,6 +84,7 @@ mod tests {
                     windows: vec![WindowEntry {
                         class: "dev.zed.Zed".into(),
                         exe: "/usr/bin/zed".into(),
+                        launch_args: None,
                         col_width: 1.0,
                     }],
                 },
@@ -130,6 +135,48 @@ mod tests {
         std::fs::write(&path, r#"{"active_workspace":1,"workspaces":[]}"#).unwrap();
         let err = Session::load(&path).unwrap_err();
         assert!(err.to_string().contains("version 0"));
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn launch_args_round_trip() {
+        let mut session = sample();
+        session.workspaces[0].windows[0].launch_args = Some(vec![
+            "--no-sandbox".to_owned(),
+            "--profile".to_owned(),
+            "/tmp/p".to_owned(),
+        ]);
+        let path = std::env::temp_dir().join("hypr-recall-test-launch-args.json");
+        session.save_to(&path).unwrap();
+        let loaded = Session::load(&path).unwrap();
+        assert_eq!(
+            loaded.workspaces[0].windows[0].launch_args,
+            session.workspaces[0].windows[0].launch_args
+        );
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn launch_args_none_omitted_from_json() {
+        let entry = WindowEntry {
+            class: "foo".into(),
+            exe: "/usr/bin/foo".into(),
+            launch_args: None,
+            col_width: 0.5,
+        };
+        let json = serde_json::to_string(&entry).unwrap();
+        assert!(!json.contains("launch_args"));
+    }
+
+    #[test]
+    fn launch_args_missing_in_json_loads_as_none() {
+        let path = std::env::temp_dir().join("hypr-recall-test-no-launch-args.json");
+        std::fs::write(
+            &path,
+            r#"{"version":1,"active_workspace":1,"workspaces":[{"workspace":1,"windows":[{"class":"foo","exe":"/usr/bin/foo","col_width":0.5}]}]}"#,
+        ).unwrap();
+        let session = Session::load(&path).unwrap();
+        assert_eq!(session.workspaces[0].windows[0].launch_args, None);
         std::fs::remove_file(&path).ok();
     }
 }
