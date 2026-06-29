@@ -220,7 +220,7 @@
       font-size: 0.68rem;
       text-transform: uppercase;
       letter-spacing: 0.18em;
-      color: #334155;
+      color: #64748b;
       margin-bottom: 24px;
     }
 
@@ -352,9 +352,29 @@
     }
 
     footer {
-      color: #1e1e3a;
+      color: #475569;
       font-size: 0.72rem;
       letter-spacing: 0.05em;
+    }
+
+    footer a.footnote {
+      color: #475569;
+      text-decoration: none;
+      cursor: pointer;
+    }
+
+    footer a.footnote:hover { color: #f97316; }
+
+    @keyframes footnote-pulse {
+      0%   { text-shadow: none; color: #475569; }
+      25%  { text-shadow: 0 0 12px rgba(249, 115, 22, 0.9), 0 0 28px rgba(249, 115, 22, 0.5); color: #f97316; }
+      50%  { text-shadow: 0 0 4px rgba(249, 115, 22, 0.4); color: #f97316; }
+      75%  { text-shadow: 0 0 12px rgba(249, 115, 22, 0.9), 0 0 28px rgba(249, 115, 22, 0.5); color: #f97316; }
+      100% { text-shadow: 0 0 6px rgba(249, 115, 22, 0.5); color: #f97316; }
+    }
+
+    #footnote:target {
+      animation: footnote-pulse 1.8s ease forwards;
     }
 
     @media (max-width: 560px) {
@@ -373,7 +393,7 @@
 
     <p class="tagline">
       Save and restore Hyprland window sessions.<br>
-      <strong>The only tool that restores scrolling layout column order and width.</strong>
+      <strong>The only tool that restores scrolling layout column order and width.<a href="#footnote" style="color: inherit; text-decoration: none;">*</a></strong>
     </p>
 
     <div class="terminal">
@@ -456,7 +476,7 @@
       <a href="https://github.com/nnthnn/hypr-recall#readme" class="btn btn-secondary">readme</a>
     </div>
 
-    <footer>MIT · built for Hyprland scrolling layout · made by <a href="https://github.com/nnthnn" style="color: #334155; text-decoration: none;" onmouseover="this.style.color='#f97316'" onmouseout="this.style.color='#334155'">nathan</a></footer>
+    <footer>MIT · built for Hyprland scrolling layout · made by <a href="https://github.com/nnthnn" style="color: #a855f7; text-decoration: none; text-shadow: 0 0 8px rgba(168, 85, 247, 0.5);" onmouseover="this.style.color='#f97316'; this.style.textShadow='0 0 10px rgba(249,115,22,0.6)'" onmouseout="this.style.color='#a855f7'; this.style.textShadow='0 0 8px rgba(168,85,247,0.5)'">nathan</a><br><br><span id="footnote">* as far as Claude Sonnet 4.6 could tell</span></footer>
   </div>
 </body>
 </html>
