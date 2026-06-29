@@ -101,9 +101,12 @@ pub async fn run(path: &Path, extra_restore_apps: &[String]) -> Result<()> {
                 "  {class}: saved={saved_count} pre={pre} needed={needed} before={before_total}"
             );
 
+            let launch_args = window.launch_args.as_deref().unwrap_or(&[]);
+
             if is_restore_app(class, extra_restore_apps) {
                 // Launch once; the app restores all its windows itself
                 let mut child = tokio::process::Command::new(exe)
+                    .args(launch_args)
                     .stdin(Stdio::null())
                     .stdout(Stdio::null())
                     .stderr(Stdio::null())
@@ -132,6 +135,7 @@ pub async fn run(path: &Path, extra_restore_apps: &[String]) -> Result<()> {
                     }
 
                     let mut child = tokio::process::Command::new(exe)
+                        .args(launch_args)
                         .stdin(Stdio::null())
                         .stdout(Stdio::null())
                         .stderr(Stdio::null())
@@ -213,15 +217,20 @@ pub fn run_dry(path: &Path, extra_restore_apps: &[String]) -> Result<()> {
             let pre = pre_existing.get(class).copied().unwrap_or(0);
             let needed = saved_count.saturating_sub(pre);
 
+            let args_suffix = match &window.launch_args {
+                Some(args) if !args.is_empty() => format!(" [args: {}]", args.join(" ")),
+                _ => String::new(),
+            };
+
             if needed == 0 {
                 println!("    {class:<40} → skip ({pre} already open)");
             } else if is_restore_app(class, extra_restore_apps) {
                 println!(
-                    "    {class:<40} → launch 1  [session-restore, waits for {needed} window{}]",
+                    "    {class:<40} → launch 1  [session-restore, waits for {needed} window{}]{args_suffix}",
                     if needed == 1 { "" } else { "s" }
                 );
             } else {
-                println!("    {class:<40} → launch {needed}");
+                println!("    {class:<40} → launch {needed}{args_suffix}");
             }
         }
         println!();
