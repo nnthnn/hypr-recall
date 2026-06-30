@@ -8,7 +8,10 @@ pub fn run(path: &Path) -> Result<()> {
     // Skip if a restore is in progress
     let lock_path = path.with_file_name("restore.lock");
     if lock_path.exists() {
-        eprintln!("{}: restore in progress, skipping save", crate::color::hr());
+        eprintln!(
+            "{}: restore in progress, skipping save",
+            crate::color::hr_err()
+        );
         return Ok(());
     }
 

@@ -99,6 +99,8 @@ fn session_path(name: Option<String>, file: Option<PathBuf>) -> PathBuf {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    // Intentional leak: clap's bin_name needs a &'static str and this runs
+    // once per short-lived process, so the gradient string lives for the run.
     let g: &'static str = color::gradient("hypr-recall").leak();
     let cmd = Cli::command().styles(styles()).bin_name(g);
     let mut matches = cmd.get_matches();

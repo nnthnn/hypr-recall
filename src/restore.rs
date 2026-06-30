@@ -64,7 +64,7 @@ pub async fn run(path: &Path, extra_restore_apps: &[String], cfg: &Config) -> Re
     if !path.exists() {
         eprintln!(
             "{}: no session file at {} — run 'hypr-recall save' first",
-            crate::color::hr(),
+            crate::color::hr_err(),
             path.display()
         );
         return Ok(());
@@ -221,7 +221,7 @@ pub fn run_dry(path: &Path, extra_restore_apps: &[String], cfg: &Config) -> Resu
     if !path.exists() {
         eprintln!(
             "{}: no session file at {} — run 'hypr-recall save' first",
-            crate::color::hr(),
+            crate::color::hr_err(),
             path.display()
         );
         return Ok(());

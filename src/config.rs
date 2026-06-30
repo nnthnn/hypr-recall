@@ -42,8 +42,8 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            overlay: true,
-            settle_delay_secs: 4,
+            overlay: default_true(),
+            settle_delay_secs: default_settle_delay(),
             session_restore_apps: Vec::new(),
             apps: HashMap::new(),
         }

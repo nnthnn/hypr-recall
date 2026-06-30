@@ -19,10 +19,6 @@ pub fn run(dir: &Path) -> Result<()> {
             if path.extension()?.to_str()? != "json" {
                 return None;
             }
-            // exclude the lock file sentinel (restore.lock is not JSON, but be safe)
-            if name == "restore" {
-                return None;
-            }
             let modified = e.metadata().ok()?.modified().ok()?;
             Some((name, path, modified))
         })
