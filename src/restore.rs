@@ -40,14 +40,20 @@ fn spawn_overlay() -> Option<tokio::process::Child> {
 pub async fn run(path: &Path, extra_restore_apps: &[String], cfg: &Config) -> Result<()> {
     if !path.exists() {
         eprintln!(
-            "hypr-recall: no session file at {} — run 'hypr-recall save' first",
+            "{}: no session file at {} — run 'hypr-recall save' first",
+            crate::color::hr(),
             path.display()
         );
         return Ok(());
     }
 
     let session = Session::load(path)?;
-    let mut overlay = spawn_overlay();
+    let name = path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("session");
+    println!("{}: restoring '{name}'", crate::color::hr());
+    let mut overlay = if cfg.overlay { spawn_overlay() } else { None };
 
     let lock_path = path.with_file_name("restore.lock");
     let _lock = LockGuard::acquire(lock_path)?;
@@ -69,7 +75,8 @@ pub async fn run(path: &Path, extra_restore_apps: &[String], cfg: &Config) -> Re
     for ws_entry in &session.workspaces {
         let ws_id = ws_entry.workspace;
         println!(
-            "hypr-recall: restoring workspace {ws_id} ({} windows)",
+            "{}: restoring workspace {ws_id} ({} windows)",
+            crate::color::hr(),
             ws_entry.windows.len()
         );
 
@@ -179,14 +186,15 @@ pub async fn run(path: &Path, extra_restore_apps: &[String], cfg: &Config) -> Re
     }
 
     hyprland::focus_workspace(session.active_workspace)?;
-    println!("hypr-recall: restore complete");
+    println!("{}: restore complete", crate::color::hr());
     Ok(())
 }
 
 pub fn run_dry(path: &Path, extra_restore_apps: &[String], cfg: &Config) -> Result<()> {
     if !path.exists() {
         eprintln!(
-            "hypr-recall: no session file at {} — run 'hypr-recall save' first",
+            "{}: no session file at {} — run 'hypr-recall save' first",
+            crate::color::hr(),
             path.display()
         );
         return Ok(());
@@ -203,7 +211,10 @@ pub fn run_dry(path: &Path, extra_restore_apps: &[String], cfg: &Config) -> Resu
         map
     };
 
-    println!("hypr-recall: dry run — no changes will be made\n");
+    println!(
+        "{}: dry run — no changes will be made\n",
+        crate::color::hr()
+    );
 
     for ws_entry in &session.workspaces {
         let ws_id = ws_entry.workspace;
@@ -347,7 +358,10 @@ async fn fix_stray_windows(session: &crate::session::Session, settle_secs: u64) 
     }
 
     if moved > 0 {
-        println!("hypr-recall: moved {moved} stray window(s) to correct workspace(s)");
+        println!(
+            "{}: moved {moved} stray window(s) to correct workspace(s)",
+            crate::color::hr()
+        );
     }
 
     Ok(())

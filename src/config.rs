@@ -72,7 +72,7 @@ impl Config {
                 return &app.launch_args;
             }
         }
-        fallback.map(Vec::as_slice).unwrap_or(&[])
+        fallback.map_or(&[], Vec::as_slice)
     }
 
     /// Returns true if `class` is a session-restore app (built-in list, config, or CLI extra).

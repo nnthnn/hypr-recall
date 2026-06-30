@@ -8,7 +8,7 @@ pub fn run(path: &Path) -> Result<()> {
     // Skip if a restore is in progress
     let lock_path = path.with_file_name("restore.lock");
     if lock_path.exists() {
-        eprintln!("hypr-recall: restore in progress, skipping save");
+        eprintln!("{}: restore in progress, skipping save", crate::color::hr());
         return Ok(());
     }
 
@@ -84,11 +84,15 @@ pub fn run(path: &Path) -> Result<()> {
     };
 
     session.save_to(path)?;
+    let name = path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("session");
     println!(
-        "hypr-recall: saved {} windows across {} workspaces → {}",
+        "{}: saved '{name}' — {} windows across {} workspaces",
+        crate::color::hr(),
         total_windows,
         session.workspaces.len(),
-        path.display()
     );
     Ok(())
 }
