@@ -50,6 +50,10 @@ fn spawn_overlay() -> Option<OverlayHandle> {
         .stdin(Stdio::piped())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
+        // Tear the overlay down if `run` returns early via `?` before the
+        // explicit kill — otherwise a mid-restore error leaves the fullscreen
+        // layer-shell window stuck on screen with no way to dismiss it.
+        .kill_on_drop(true)
         .spawn()
         .ok()?;
     let stdin = child.stdin.take()?;
