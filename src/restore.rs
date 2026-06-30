@@ -23,18 +23,37 @@ const SESSION_RESTORE_APPS: &[&str] = &[
     "discord",
 ];
 
-fn spawn_overlay() -> Option<tokio::process::Child> {
+struct OverlayHandle {
+    child: tokio::process::Child,
+    stdin: tokio::process::ChildStdin,
+}
+
+impl OverlayHandle {
+    async fn send_progress(&mut self, current: usize, total: usize) {
+        use tokio::io::AsyncWriteExt;
+        let msg = format!("restoring workspace {current} / {total}\n");
+        let _ = self.stdin.write_all(msg.as_bytes()).await;
+    }
+
+    async fn kill(&mut self) {
+        let _ = self.child.kill().await;
+    }
+}
+
+fn spawn_overlay() -> Option<OverlayHandle> {
     let mut path = std::env::current_exe().ok()?;
     path.set_file_name("hypr-recall-overlay");
     if !path.exists() {
         return None;
     }
-    tokio::process::Command::new(path)
-        .stdin(Stdio::null())
+    let mut child = tokio::process::Command::new(path)
+        .stdin(Stdio::piped())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()
-        .ok()
+        .ok()?;
+    let stdin = child.stdin.take()?;
+    Some(OverlayHandle { child, stdin })
 }
 
 pub async fn run(path: &Path, extra_restore_apps: &[String], cfg: &Config) -> Result<()> {
@@ -72,13 +91,17 @@ pub async fn run(path: &Path, extra_restore_apps: &[String], cfg: &Config) -> Re
     let rx = hyprland::subscribe_events().await?;
     let mut events = EventStream::new(rx);
 
-    for ws_entry in &session.workspaces {
+    let total_workspaces = session.workspaces.len();
+    for (ws_idx, ws_entry) in session.workspaces.iter().enumerate() {
         let ws_id = ws_entry.workspace;
         println!(
             "{}: restoring workspace {ws_id} ({} windows)",
             crate::color::hr(),
             ws_entry.windows.len()
         );
+        if let Some(ref mut ov) = overlay {
+            ov.send_progress(ws_idx + 1, total_workspaces).await;
+        }
 
         hyprland::focus_workspace(ws_id)?;
         sleep(Duration::from_millis(200)).await;
@@ -181,8 +204,8 @@ pub async fn run(path: &Path, extra_restore_apps: &[String], cfg: &Config) -> Re
 
     fix_stray_windows(&session, cfg.settle_delay_secs).await?;
 
-    if let Some(ref mut child) = overlay {
-        let _ = child.kill().await;
+    if let Some(ref mut ov) = overlay {
+        ov.kill().await;
     }
 
     hyprland::focus_workspace(session.active_workspace)?;
