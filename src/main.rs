@@ -68,6 +68,13 @@ enum Commands {
         #[arg(long, help = "Print what would be restored without launching anything")]
         dry_run: bool,
         #[arg(
+            short = 'w',
+            long,
+            value_name = "ID",
+            help = "Restore only this workspace from the session"
+        )]
+        workspace: Option<i32>,
+        #[arg(
             long,
             value_name = "CLASS",
             help = "Treat CLASS as a session-restore app (repeatable)",
@@ -127,13 +134,14 @@ async fn main() -> Result<()> {
             name,
             file,
             dry_run,
+            workspace,
             session_restore_app,
         } => {
             let path = session_path(name, file);
             if dry_run {
-                restore::run_dry(&path, &session_restore_app, &cfg)?;
+                restore::run_dry(&path, &session_restore_app, &cfg, workspace)?;
             } else {
-                restore::run(&path, &session_restore_app, &cfg).await?;
+                restore::run(&path, &session_restore_app, &cfg, workspace).await?;
             }
         }
         Commands::Status { name, file } => {

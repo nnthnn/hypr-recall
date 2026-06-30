@@ -445,6 +445,41 @@
     There are enough of those already.
   </p>
 
+  <h3>Just the one workspace, please</h3>
+
+  <p>
+    Sometimes you do not want the whole world back. You closed one
+    workspace by accident — the rest of your desktop is perfectly happy
+    where it is, thank you. For this there is <code>--workspace</code>
+    (or <code>-w</code>, for the hurried):
+  </p>
+
+  <pre><code><span class="prompt">▸</span> <span class="hi">hypr-recall restore work --workspace 2</span></code></pre>
+
+  <p>
+    Only workspace 2 from the <code>work</code> session is rebuilt.
+    Everything else is left untouched — even the part where hypr-recall
+    chases down stray windows only ever herds them toward the one
+    workspace you asked about. It minds its own business, mostly.
+  </p>
+
+  <h3>Watching the gears turn</h3>
+
+  <p>
+    By default a restore narrates only the broad strokes: which workspace
+    it is on, and when it has finished. But should something go sideways
+    and you wish to see every launch, every column nudged left, every
+    stray window herded home, add <code>--verbose</code> (or <code>-v</code>):
+  </p>
+
+  <pre><code><span class="prompt">▸</span> <span class="hi">hypr-recall restore -v</span></code></pre>
+
+  <p>
+    The diagnostics are murmured to standard error rather than standard
+    out, so <code>hypr-recall restore -v 2&gt;trace.log</code> keeps your
+    terminal serene while quietly writing the whole confession to a file.
+  </p>
+
   <!-- ═══════════════════════════════════════════════════ -->
   <span class="chapter-num">04</span>
   <h2>Special Cases & Strange Apps</h2>

@@ -49,6 +49,15 @@ cargo test
 CI mirrors this across three jobs: a core lint/test job, an overlay job that
 builds the `overlay` feature against gtk4, and a `cargo-deny` advisory audit.
 
+### Don't forget the docs
+
+If your change adds or changes a command, flag, config key, or user-visible
+behavior, update the docs in the same PR:
+
+- `README.md` — usage examples, config docs, feature list
+- `docs/index.html` — the website
+- `docs/guide.html` — the guide
+
 ## Code style
 
 - Formatting is enforced by `rustfmt` (`cargo fmt`).

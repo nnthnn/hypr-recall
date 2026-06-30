@@ -8,7 +8,7 @@ use tokio::time::sleep;
 use crate::config::Config;
 use crate::hyprland::{self, EventStream};
 use crate::lock::LockGuard;
-use crate::session::Session;
+use crate::session::{Session, WorkspaceEntry};
 
 const SESSION_RESTORE_APPS: &[&str] = &[
     "firefox",
@@ -117,7 +117,29 @@ fn plan_workspace(
     plans
 }
 
-pub async fn run(path: &Path, extra_restore_apps: &[String], cfg: &Config) -> Result<()> {
+/// Select the workspaces to act on. With `only` set, restrict to that single
+/// workspace; otherwise return all of them. Returns `None` if `only` was given
+/// but no such workspace exists in the session.
+fn select_workspaces(session: &Session, only: Option<i32>) -> Option<Vec<&WorkspaceEntry>> {
+    match only {
+        Some(id) => {
+            let selected: Vec<&WorkspaceEntry> = session
+                .workspaces
+                .iter()
+                .filter(|w| w.workspace == id)
+                .collect();
+            (!selected.is_empty()).then_some(selected)
+        }
+        None => Some(session.workspaces.iter().collect()),
+    }
+}
+
+pub async fn run(
+    path: &Path,
+    extra_restore_apps: &[String],
+    cfg: &Config,
+    only_workspace: Option<i32>,
+) -> Result<()> {
     if !path.exists() {
         eprintln!(
             "{}: no session file at {} — run 'hypr-recall save' first",
@@ -132,7 +154,18 @@ pub async fn run(path: &Path, extra_restore_apps: &[String], cfg: &Config) -> Re
         .file_stem()
         .and_then(|s| s.to_str())
         .unwrap_or("session");
-    println!("{}: restoring '{name}'", crate::color::hr());
+
+    let Some(workspaces) = select_workspaces(&session, only_workspace) else {
+        eprintln!(
+            "{}: workspace {} not found in session '{name}'",
+            crate::color::hr_err(),
+            only_workspace.unwrap_or_default()
+        );
+        return Ok(());
+    };
+
+    let scope = only_workspace.map_or(String::new(), |w| format!(" (workspace {w} only)"));
+    println!("{}: restoring '{name}'{scope}", crate::color::hr());
     let mut overlay = if cfg.overlay { spawn_overlay() } else { None };
 
     let lock_path = path.with_file_name("restore.lock");
@@ -152,8 +185,8 @@ pub async fn run(path: &Path, extra_restore_apps: &[String], cfg: &Config) -> Re
     let rx = hyprland::subscribe_events().await?;
     let mut events = EventStream::new(rx);
 
-    let total_workspaces = session.workspaces.len();
-    for (ws_idx, ws_entry) in session.workspaces.iter().enumerate() {
+    let total_workspaces = workspaces.len();
+    for (ws_idx, &ws_entry) in workspaces.iter().enumerate() {
         let ws_id = ws_entry.workspace;
         println!(
             "{}: restoring workspace {ws_id} ({} windows)",
@@ -249,18 +282,25 @@ pub async fn run(path: &Path, extra_restore_apps: &[String], cfg: &Config) -> Re
         reorder_columns(ws_id, ws_entry).await?;
     }
 
-    fix_stray_windows(&session, cfg.settle_delay_secs).await?;
+    fix_stray_windows(&workspaces, cfg.settle_delay_secs).await?;
 
     if let Some(ref mut ov) = overlay {
         ov.kill().await;
     }
 
-    hyprland::focus_workspace(session.active_workspace)?;
+    // For a single-workspace restore, end focused on that workspace rather than
+    // jumping to the session's saved active workspace (which we didn't restore).
+    hyprland::focus_workspace(only_workspace.unwrap_or(session.active_workspace))?;
     println!("{}: restore complete", crate::color::hr());
     Ok(())
 }
 
-pub fn run_dry(path: &Path, extra_restore_apps: &[String], cfg: &Config) -> Result<()> {
+pub fn run_dry(
+    path: &Path,
+    extra_restore_apps: &[String],
+    cfg: &Config,
+    only_workspace: Option<i32>,
+) -> Result<()> {
     if !path.exists() {
         eprintln!(
             "{}: no session file at {} — run 'hypr-recall save' first",
@@ -271,6 +311,15 @@ pub fn run_dry(path: &Path, extra_restore_apps: &[String], cfg: &Config) -> Resu
     }
 
     let session = Session::load(path)?;
+
+    let Some(workspaces) = select_workspaces(&session, only_workspace) else {
+        eprintln!(
+            "{}: workspace {} not found in session",
+            crate::color::hr_err(),
+            only_workspace.unwrap_or_default()
+        );
+        return Ok(());
+    };
 
     let pre_existing: HashMap<String, usize> = {
         let clients = hyprland::get_clients()?;
@@ -286,7 +335,7 @@ pub fn run_dry(path: &Path, extra_restore_apps: &[String], cfg: &Config) -> Resu
         crate::color::hr()
     );
 
-    for ws_entry in &session.workspaces {
+    for &ws_entry in &workspaces {
         let ws_id = ws_entry.workspace;
         let active = if ws_id == session.active_workspace {
             "  ← active"
@@ -396,20 +445,23 @@ pub fn plan_width_assignments(saved: &[(&str, f64)], live: &[LiveWindow]) -> Vec
     ops
 }
 
-/// After all workspaces are restored, some apps (e.g. Discord) open late windows
-/// that land on the wrong workspace because focus has already moved on. Walk every
-/// live client: if its class belongs to a workspace in the session and it ended up
-/// somewhere else, silently move it to the expected workspace.
-async fn fix_stray_windows(session: &crate::session::Session, settle_secs: u64) -> Result<()> {
+/// After the restored workspaces are populated, some apps (e.g. Discord) open
+/// late windows that land on the wrong workspace because focus has already moved
+/// on. Walk every live client: if its class belongs to a restored workspace and
+/// it ended up somewhere else, silently move it to the expected workspace.
+///
+/// `workspaces` is the set actually restored, so a single-workspace restore only
+/// ever sweeps windows toward that one workspace and never disturbs others.
+async fn fix_stray_windows(workspaces: &[&WorkspaceEntry], settle_secs: u64) -> Result<()> {
     // Wait for late-opening windows (e.g. Discord Friends sidebar) to appear
     // before we sweep. Without this, the sweep runs before Discord finishes.
     sleep(Duration::from_secs(settle_secs)).await;
 
-    // Build class → [expected workspace ids] from the saved session.
+    // Build class → [expected workspace ids] from the restored workspaces.
     // A class can appear on multiple workspaces (e.g. ghostty on ws2); each
     // unique workspace is recorded once, in session order.
     let mut class_to_ws: HashMap<String, Vec<i32>> = HashMap::new();
-    for ws_entry in &session.workspaces {
+    for ws_entry in workspaces {
         for win in &ws_entry.windows {
             let workspaces = class_to_ws.entry(win.class.clone()).or_default();
             if !workspaces.contains(&ws_entry.workspace) {
@@ -715,5 +767,40 @@ mod tests {
         let entry = ws(vec![win("firefox", "/usr/lib/firefox (deleted)")]);
         let plans = plan_workspace(&entry, &HashMap::new(), &Config::default(), &[]);
         assert_eq!(plans[0].exe, "/usr/lib/firefox");
+    }
+
+    fn session_with(ws_ids: &[i32]) -> Session {
+        Session {
+            version: crate::session::SESSION_VERSION,
+            active_workspace: ws_ids.first().copied().unwrap_or(1),
+            workspaces: ws_ids
+                .iter()
+                .map(|&id| WorkspaceEntry {
+                    workspace: id,
+                    windows: vec![win("firefox", "/usr/lib/firefox")],
+                })
+                .collect(),
+        }
+    }
+
+    #[test]
+    fn select_none_returns_all_workspaces() {
+        let session = session_with(&[1, 2, 3]);
+        let selected = select_workspaces(&session, None).unwrap();
+        assert_eq!(selected.len(), 3);
+    }
+
+    #[test]
+    fn select_existing_workspace_returns_just_it() {
+        let session = session_with(&[1, 2, 3]);
+        let selected = select_workspaces(&session, Some(2)).unwrap();
+        assert_eq!(selected.len(), 1);
+        assert_eq!(selected[0].workspace, 2);
+    }
+
+    #[test]
+    fn select_missing_workspace_returns_none() {
+        let session = session_with(&[1, 2, 3]);
+        assert!(select_workspaces(&session, Some(9)).is_none());
     }
 }

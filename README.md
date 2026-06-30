@@ -46,6 +46,7 @@ hypr-recall save                      # snapshot current session (default name)
 hypr-recall save work                 # snapshot to a named session
 hypr-recall restore                   # restore default session
 hypr-recall restore work              # restore named session
+hypr-recall restore work --workspace 2   # restore only workspace 2 from a session
 hypr-recall list                      # list all saved sessions with age and window counts
 hypr-recall restore --dry-run         # preview what would be restored
 hypr-recall restore -v                # verbose diagnostics on stderr (launch counts, column swaps)
