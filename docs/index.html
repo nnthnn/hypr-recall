@@ -45,10 +45,31 @@
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
+    /* ── Self-hosted fonts ── */
+
+    /* Space Mono — display face for the wordmark */
+    @font-face {
+      font-family: 'Space Mono';
+      font-style: normal;
+      font-weight: 700;
+      font-display: swap;
+      src: url(assets/spacemono-700.woff2) format('woff2');
+    }
+
+    /* JetBrains Mono — variable file serves 400/600/700 for body + UI */
+    @font-face {
+      font-family: 'JetBrains Mono';
+      font-style: normal;
+      font-weight: 400 700;
+      font-display: swap;
+      src: url(assets/jetbrainsmono.woff2) format('woff2');
+    }
+
     body {
       background: #080810;
       color: #e2e8f0;
-      font-family: 'Courier New', monospace;
+      font-family: 'JetBrains Mono', 'Courier New', monospace;
+      line-height: 1.65;
       min-height: 100vh;
       overflow-x: hidden;
     }
@@ -86,9 +107,9 @@
     .container {
       position: relative;
       z-index: 1;
-      max-width: 820px;
+      max-width: 1040px;
       margin: 0 auto;
-      padding: 80px 24px 60px;
+      padding: 80px 32px 60px;
       text-align: center;
     }
 
@@ -116,9 +137,10 @@
     }
 
     h1 {
+      font-family: 'Space Mono', 'JetBrains Mono', monospace;
       font-size: clamp(2.4rem, 8vw, 4rem);
       font-weight: 700;
-      letter-spacing: -0.02em;
+      letter-spacing: -0.04em;
       background: linear-gradient(130deg, #f97316 30%, #a855f7 100%);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
@@ -179,6 +201,7 @@
       padding: 20px 24px;
       text-align: left;
       margin: 0 auto 64px;
+      overflow-x: auto;
     }
 
     .terminal::before {
@@ -194,11 +217,23 @@
       display: block;
       font-size: 0.92rem;
       line-height: 2.1;
+      white-space: nowrap;
     }
 
     .prompt { color: #7c3aed; }
     .cmd    { color: #f8fafc; }
-    .cmt    { color: #334155; }
+    .cmt    { color: #64748b; }
+
+    /* Inline code tokens within body copy */
+    p code {
+      font-family: 'JetBrains Mono', 'Courier New', monospace;
+      font-size: 0.92em;
+      color: #fdba74;
+      background: rgba(249, 115, 22, 0.1);
+      border: 1px solid rgba(249, 115, 22, 0.18);
+      border-radius: 4px;
+      padding: 1px 5px;
+    }
 
     .cursor {
       display: inline-block;
@@ -229,38 +264,39 @@
     .callouts {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 1px;
-      background: #1a1a2e;
-      border: 1px solid #1a1a2e;
-      border-radius: 10px;
-      overflow: hidden;
-      margin-bottom: 16px;
+      gap: 12px;
+      margin-bottom: 48px;
       text-align: left;
     }
 
     .callout {
       background: #0c0c18;
-      padding: 22px 20px;
-      transition: background 0.2s;
+      border: 1px solid #1a1a2e;
+      border-radius: 10px;
+      padding: 28px 24px;
+      transition: background 0.2s, border-color 0.2s, transform 0.2s;
     }
 
-    .callout:hover { background: #0f0f1e; }
+    .callout:hover {
+      background: #0f0f1e;
+      border-color: rgba(168, 85, 247, 0.3);
+      transform: translateY(-2px);
+    }
 
     .callout-badge {
       display: inline-block;
       font-size: 0.62rem;
       text-transform: uppercase;
       letter-spacing: 0.14em;
-      color: #f97316;
-      border: 1px solid rgba(249, 115, 22, 0.35);
+      color: #fff;
+      background: #f97316;
       border-radius: 4px;
-      padding: 2px 7px;
-      margin-bottom: 10px;
+      padding: 3px 8px;
+      margin-bottom: 12px;
     }
 
     .callout-badge.purple {
-      color: #a855f7;
-      border-color: rgba(168, 85, 247, 0.35);
+      background: #a855f7;
     }
 
     .callout h3 {
@@ -271,17 +307,17 @@
     }
 
     .callout p {
-      font-size: 0.8rem;
-      color: #475569;
-      line-height: 1.6;
+      font-size: 0.875rem;
+      color: #94a3b8;
+      line-height: 1.7;
     }
 
     /* ── Feature grid ── */
 
     .features {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 12px;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 16px;
       margin-bottom: 64px;
       text-align: left;
     }
@@ -290,7 +326,7 @@
       background: rgba(255, 255, 255, 0.02);
       border: 1px solid rgba(255, 255, 255, 0.05);
       border-radius: 8px;
-      padding: 16px 14px;
+      padding: 22px 20px;
       overflow: hidden;
       transition: border-color 0.2s;
     }
@@ -306,9 +342,9 @@
     }
 
     .feature p {
-      font-size: 0.78rem;
-      color: #475569;
-      line-height: 1.6;
+      font-size: 0.875rem;
+      color: #94a3b8;
+      line-height: 1.7;
     }
 
     /* ── Links ── */
@@ -325,7 +361,7 @@
       display: inline-block;
       padding: 11px 28px;
       border-radius: 6px;
-      font-family: 'Courier New', monospace;
+      font-family: 'JetBrains Mono', 'Courier New', monospace;
       font-size: 0.88rem;
       text-decoration: none;
       transition: all 0.2s;
@@ -343,7 +379,7 @@
 
     .btn-secondary {
       border: 1px solid #1e1e3a;
-      color: #64748b;
+      color: #94a3b8;
     }
 
     .btn-secondary:hover {
@@ -352,21 +388,55 @@
     }
 
     footer {
-      color: #475569;
+      color: #64748b;
       font-size: 0.72rem;
       letter-spacing: 0.05em;
     }
 
     footer a.footnote {
-      color: #475569;
+      color: #64748b;
       text-decoration: none;
       cursor: pointer;
     }
 
     footer a.footnote:hover { color: #f97316; }
 
+    .footnote-ref {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    .footer-link {
+      color: #a855f7;
+      text-decoration: none;
+      text-shadow: 0 0 8px rgba(168, 85, 247, 0.5);
+      transition: color 0.2s, text-shadow 0.2s;
+    }
+
+    .footer-link:hover {
+      color: #f97316;
+      text-shadow: 0 0 10px rgba(249, 115, 22, 0.6);
+    }
+
+    .sponsor-link {
+      color: #64748b;
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+
+    .sponsor-link .heart {
+      color: #f97316;
+      transition: text-shadow 0.2s;
+    }
+
+    .sponsor-link:hover { color: #f97316; }
+
+    .sponsor-link:hover .heart {
+      text-shadow: 0 0 10px rgba(249, 115, 22, 0.7);
+    }
+
     @keyframes footnote-pulse {
-      0%   { text-shadow: none; color: #475569; }
+      0%   { text-shadow: none; color: #64748b; }
       25%  { text-shadow: 0 0 12px rgba(249, 115, 22, 0.9), 0 0 28px rgba(249, 115, 22, 0.5); color: #f97316; }
       50%  { text-shadow: 0 0 4px rgba(249, 115, 22, 0.4); color: #f97316; }
       75%  { text-shadow: 0 0 12px rgba(249, 115, 22, 0.9), 0 0 28px rgba(249, 115, 22, 0.5); color: #f97316; }
@@ -377,8 +447,24 @@
       animation: footnote-pulse 1.8s ease forwards;
     }
 
-    @media (max-width: 560px) {
+    /* Keyboard focus */
+    a:focus-visible {
+      outline: 2px solid #f97316;
+      outline-offset: 3px;
+      border-radius: 4px;
+    }
+
+    /* Respect reduced-motion preference */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation: none !important;
+        transition: none !important;
+      }
+    }
+
+    @media (max-width: 600px) {
       .callouts { grid-template-columns: 1fr; }
+      .container { padding: 60px 20px 48px; }
     }
   </style>
 </head>
@@ -393,7 +479,7 @@
 
     <p class="tagline">
       Save and restore Hyprland window sessions.<br>
-      <strong>The only tool that restores scrolling layout column order and width.<a href="#footnote" style="color: inherit; text-decoration: none;">*</a></strong>
+      <strong>The only tool that restores scrolling layout column order and width.<a href="#footnote" class="footnote-ref">*</a></strong>
     </p>
 
     <div class="terminal">
@@ -412,7 +498,7 @@
 
     <!-- Unique differentiators -->
     <p class="section-label">what makes it different</p>
-    <div class="callouts" style="margin-bottom: 48px;">
+    <div class="callouts">
       <div class="callout">
         <span class="callout-badge">unique</span>
         <h3>Column order</h3>
@@ -482,7 +568,7 @@
       <a href="https://github.com/nnthnn/hypr-recall#readme" class="btn btn-secondary">readme</a>
     </div>
 
-    <footer>MIT · built for Hyprland scrolling layout · made by <a href="https://github.com/nnthnn" style="color: #a855f7; text-decoration: none; text-shadow: 0 0 8px rgba(168, 85, 247, 0.5);" onmouseover="this.style.color='#f97316'; this.style.textShadow='0 0 10px rgba(249,115,22,0.6)'" onmouseout="this.style.color='#a855f7'; this.style.textShadow='0 0 8px rgba(168,85,247,0.5)'">nathan</a><br><br><span id="footnote">* as far as Claude Sonnet 4.6 could tell</span></footer>
+    <footer>MIT · built for Hyprland scrolling layout · made by <a href="https://github.com/nnthnn" class="footer-link">nathan</a> · <a href="https://ko-fi.com/nnthnn" class="sponsor-link"><span class="heart">♥</span> sponsor</a><br><br><span id="footnote">* as far as Claude Sonnet 4.6 could tell</span></footer>
   </div>
 </body>
 </html>

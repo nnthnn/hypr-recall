@@ -10,6 +10,15 @@
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
+    /* JetBrains Mono — variable file serves 400/600/700 for code + UI accents */
+    @font-face {
+      font-family: 'JetBrains Mono';
+      font-style: normal;
+      font-weight: 400 700;
+      font-display: swap;
+      src: url(assets/jetbrainsmono.woff2) format('woff2');
+    }
+
     body {
       background: #080810;
       color: #cbd5e1;
@@ -52,7 +61,7 @@
 
     /* ── Nav ── */
     .nav {
-      font-family: 'Courier New', monospace;
+      font-family: 'JetBrains Mono', 'Courier New', monospace;
       font-size: 1.2rem;
       color: #334155;
       margin-bottom: 64px;
@@ -90,13 +99,13 @@
 
     .subtitle {
       font-style: italic;
-      color: #475569;
+      color: #64748b;
       font-size: 1.5rem;
     }
 
     /* ── Chapter headings ── */
     h2 {
-      font-family: 'Courier New', monospace;
+      font-family: 'JetBrains Mono', 'Courier New', monospace;
       font-size: 1.08rem;
       text-transform: uppercase;
       letter-spacing: 0.2em;
@@ -127,15 +136,15 @@
       border-left: 2px solid #1e1e3a;
       padding: 4px 0 4px 20px;
       margin: 28px 0;
-      color: #475569;
+      color: #64748b;
       font-style: italic;
       font-size: 1.425rem;
     }
-    .aside strong { color: #64748b; }
+    .aside strong { color: #94a3b8; }
 
     /* ── Code ── */
     code {
-      font-family: 'Courier New', monospace;
+      font-family: 'JetBrains Mono', 'Courier New', monospace;
       font-size: 0.88em;
       color: #f97316;
       background: rgba(249,115,22,0.08);
@@ -170,7 +179,7 @@
     .cmd    { color: #f97316; }          /* commands, JSON keys */
     .str    { color: #38bdf8; }          /* string values */
     .num    { color: #a78bfa; }          /* numbers */
-    .cmt    { color: #475569; }          /* comments */
+    .cmt    { color: #64748b; }          /* comments */
     .kw     { color: #34d399; }          /* Lua keywords/functions */
     .hi     { color: #f97316; }          /* legacy alias */
 
@@ -192,31 +201,53 @@
       padding-top: 32px;
       border-top: 1px solid #1e1e3a;
       font-size: 1.23rem;
-      color: #475569;
+      color: #64748b;
     }
-    .footnotes p { color: #475569; font-size: 1.23rem; margin-bottom: 0.8em; }
+    .footnotes p { color: #64748b; font-size: 1.23rem; margin-bottom: 0.8em; }
 
     /* ── Footer ── */
     footer {
       margin-top: 80px;
-      font-family: 'Courier New', monospace;
+      font-family: 'JetBrains Mono', 'Courier New', monospace;
       font-size: 1.08rem;
-      color: #1e1e3a;
+      color: #64748b;
       text-align: center;
       letter-spacing: 0.05em;
     }
-    footer a { color: #334155; text-decoration: none; }
+    footer a { color: #94a3b8; text-decoration: none; }
     footer a:hover { color: #f97316; }
 
     /* ── HR ── */
     hr { border: none; border-top: 1px solid #1a1a2e; margin: 48px 0; }
 
     .chapter-num {
-      font-family: 'Courier New', monospace;
+      font-family: 'JetBrains Mono', 'Courier New', monospace;
       font-size: 4.5rem;
       color: #1a1a2e;
       display: block;
       margin-bottom: -8px;
+    }
+
+    .closing {
+      color: #64748b;
+      font-style: italic;
+      text-align: center;
+      font-size: 0.95rem;
+    }
+
+    /* Keyboard focus */
+    a:focus-visible {
+      outline: 2px solid #f97316;
+      outline-offset: 3px;
+      border-radius: 4px;
+    }
+
+    /* Respect reduced-motion preference */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation: none !important;
+        transition: none !important;
+      }
     }
   </style>
 </head>
@@ -625,7 +656,7 @@ hypr-recall: saved sessions
 
   <hr>
 
-  <p style="color: #475569; font-style: italic; text-align: center; font-size: 0.95rem;">
+  <p class="closing">
     And that, more or less, is everything.<br>
     Go save your session. Right now. Before you forget.
   </p>
