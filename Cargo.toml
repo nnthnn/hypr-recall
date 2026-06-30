@@ -1,6 +1,6 @@
 [package]
 name = "hypr-recall"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 default-run = "hypr-recall"
 description = "Save and restore Hyprland window sessions with scrolling layout column order and width support"
