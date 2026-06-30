@@ -175,6 +175,8 @@ just audit       # cargo-deny advisory check (needs cargo-deny)
 CI mirrors these: a core job (`fmt`/`clippy`/`test`), an overlay job that builds
 and lints the `overlay` feature against gtk4, and a dependency advisory audit.
 
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the full contributor workflow.
+
 ## Requirements
 
 - Hyprland with Lua config
