@@ -19,13 +19,13 @@ No existing tool restores column positions and widths in scrolling layouts — h
 **User-local** (no elevated privileges):
 ```fish
 cargo build --release
-cp target/release/hypr-recall ~/.local/bin/
+cp target/release/hypr-recall target/release/hypr-recall-overlay ~/.local/bin/
 ```
 
 **System-wide:**
 ```fish
 cargo build --release
-sudo install -Dm755 target/release/hypr-recall /usr/local/bin/hypr-recall
+sudo install -Dm755 target/release/hypr-recall target/release/hypr-recall-overlay /usr/local/bin/
 ```
 
 ## Usage
@@ -132,7 +132,7 @@ hl.bind("SUPER", "F12", "exec", "hypr-recall save")
 Optional config at `~/.config/hypr-recall/config.toml`:
 
 ```toml
-overlay = true              # show spinning overlay during restore (default: true)
+overlay = true              # show spinning overlay with workspace progress during restore (default: true)
 settle_delay_secs = 4       # seconds to wait before sweeping stray windows (default: 4)
 
 # add apps to the session-restore list beyond the built-in set

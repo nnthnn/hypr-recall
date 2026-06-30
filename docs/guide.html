@@ -386,11 +386,10 @@
 
   <div class="aside">
     While all of this is happening, a spinning overlay bearing the hypr-recall
-    logo floats above your workspaces. It is not doing anything helpful.
-    It is just there so you know something is happening and don't
-    start clicking around in a panic. It disappears the moment the restore
-    completes. You can disable it with <code>overlay = false</code> in the
-    config file if you find it unsettling.
+    logo floats above your workspaces. It shows which workspace is currently
+    being restored ("restoring workspace 2 / 4") so you know it is not stuck.
+    It disappears the moment the restore completes. You can disable it with
+    <code>overlay = false</code> in the config file if you find it unsettling.
   </div>
 
   <h3>The dry run, for the anxious</h3>
@@ -529,7 +528,7 @@ end, { timeout = <span class="num">600000</span>, type = <span class="str">"repe
 
   <pre><code><span class="cmt"># ~/.config/hypr-recall/config.toml</span>
 
-overlay = <span class="kw">true</span>             <span class="cmt"># spinning overlay during restore</span>
+overlay = <span class="kw">true</span>             <span class="cmt"># overlay with workspace progress during restore</span>
 settle_delay_secs = <span class="num">4</span>     <span class="cmt"># wait for late-opening windows before stray sweep</span>
 
 <span class="cmt"># apps to treat as session-restore apps beyond the built-in list</span>
