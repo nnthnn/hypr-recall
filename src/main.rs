@@ -9,6 +9,7 @@ mod edit;
 mod hyprland;
 mod list;
 mod lock;
+mod log;
 mod restore;
 mod save;
 mod session;
@@ -38,6 +39,13 @@ fn styles() -> Styles {
     about = "Save and restore Hyprland window sessions"
 )]
 struct Cli {
+    #[arg(
+        short,
+        long,
+        global = true,
+        help = "Print verbose diagnostic output (to stderr)"
+    )]
+    verbose: bool,
     #[command(subcommand)]
     command: Commands,
 }
@@ -106,6 +114,7 @@ async fn main() -> Result<()> {
     let cmd = Cli::command().styles(styles()).bin_name(g);
     let mut matches = cmd.get_matches();
     let cli = Cli::from_arg_matches_mut(&mut matches).unwrap_or_else(|e| e.exit());
+    log::set_verbose(cli.verbose);
 
     let cfg = config::Config::load()?;
 
