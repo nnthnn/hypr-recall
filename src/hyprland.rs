@@ -305,8 +305,13 @@ impl EventStream {
                         // A tracked window closed — reset stability and re-evaluate.
                         stable_since = None;
                         Self::update_stable(&open_addresses, target_count, &mut stable_since);
+                    } else {
+                        // Not tracked in this wait, but it may be a buffered open
+                        // awaiting another class's turn. Drop the matching buffered
+                        // open so a window that opened-and-closed before its turn
+                        // isn't counted as still live when we get to its class.
+                        self.invalidate_buffered_open(&address);
                     }
-                    // Close events for untracked windows are irrelevant; don't buffer them.
                 }
                 Ok(None) => break,
                 Err(_) => {}
@@ -314,6 +319,15 @@ impl EventStream {
         }
 
         open_addresses.len()
+    }
+
+    /// Remove a buffered `WindowOpen` whose address matches `address`, if present.
+    /// Called when a close arrives for a window we aren't yet tracking, so a
+    /// short-lived window of a not-yet-processed class doesn't linger in the
+    /// buffer and inflate that class's count later.
+    fn invalidate_buffered_open(&mut self, address: &str) {
+        self.buffer
+            .retain(|e| !matches!(e, HyprEvent::WindowOpen { address: a, .. } if a == address));
     }
 
     fn update_stable(open: &HashSet<String>, target: usize, stable_since: &mut Option<Instant>) {
@@ -390,5 +404,41 @@ mod tests {
     fn title_with_commas_doesnt_affect_class() {
         let ev = parse_event_line("openwindow>>0x1,1,firefox,Page, with, commas").unwrap();
         assert!(matches!(ev, HyprEvent::WindowOpen { ref class, .. } if class == "firefox"));
+    }
+
+    #[test]
+    fn invalidate_buffered_open_removes_matching_address() {
+        let (_tx, rx) = mpsc::channel(4);
+        let mut stream = EventStream::new(rx);
+        stream.buffer.push_back(HyprEvent::WindowOpen {
+            address: "0xA".to_owned(),
+            class: "discord".to_owned(),
+        });
+        stream.buffer.push_back(HyprEvent::WindowOpen {
+            address: "0xB".to_owned(),
+            class: "discord".to_owned(),
+        });
+
+        stream.invalidate_buffered_open("0xA");
+
+        assert_eq!(stream.buffer.len(), 1);
+        assert!(matches!(
+            stream.buffer.front(),
+            Some(HyprEvent::WindowOpen { address, .. }) if address == "0xB"
+        ));
+    }
+
+    #[test]
+    fn invalidate_buffered_open_no_match_is_noop() {
+        let (_tx, rx) = mpsc::channel(4);
+        let mut stream = EventStream::new(rx);
+        stream.buffer.push_back(HyprEvent::WindowOpen {
+            address: "0xA".to_owned(),
+            class: "discord".to_owned(),
+        });
+
+        stream.invalidate_buffered_open("0xZ");
+
+        assert_eq!(stream.buffer.len(), 1);
     }
 }
