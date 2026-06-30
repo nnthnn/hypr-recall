@@ -1,0 +1,8 @@
+# cargo-deny configuration. Run `just audit` (or `cargo deny check advisories`).
+# Only the advisory database is enforced here; license/ban policy is left open.
+
+[advisories]
+# Fail on security vulnerabilities; surface unmaintained crates as warnings.
+yanked = "deny"
+unmaintained = "workspace"
+ignore = []

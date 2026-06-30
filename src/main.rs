@@ -34,6 +34,7 @@ fn styles() -> Styles {
 #[derive(Parser)]
 #[command(
     name = "hypr-recall",
+    version,
     about = "Save and restore Hyprland window sessions"
 )]
 struct Cli {
