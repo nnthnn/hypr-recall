@@ -6,7 +6,11 @@ use crate::session::Session;
 
 pub fn run(path: &Path) -> Result<()> {
     if !path.exists() {
-        println!("hypr-recall: no session file at {}", path.display());
+        println!(
+            "{}: no session file at {}",
+            crate::color::hr(),
+            path.display()
+        );
         println!("  run 'hypr-recall save' to create one");
         return Ok(());
     }
@@ -17,7 +21,8 @@ pub fn run(path: &Path) -> Result<()> {
     let total_windows: usize = session.workspaces.iter().map(|ws| ws.windows.len()).sum();
 
     println!(
-        "hypr-recall: {} ({} workspace{}, {} window{})",
+        "{}: {} ({} workspace{}, {} window{})",
+        crate::color::hr(),
         age,
         session.workspaces.len(),
         if session.workspaces.len() == 1 {

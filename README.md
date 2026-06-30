@@ -31,17 +31,19 @@ sudo install -Dm755 target/release/hypr-recall /usr/local/bin/hypr-recall
 ## Usage
 
 ```fish
-hypr-recall save                      # snapshot current session
-hypr-recall restore                   # restore saved session
+hypr-recall save                      # snapshot current session (default name)
+hypr-recall save work                 # snapshot to a named session
+hypr-recall restore                   # restore default session
+hypr-recall restore work              # restore named session
+hypr-recall list                      # list all saved sessions with age and window counts
 hypr-recall restore --dry-run         # preview what would be restored
 hypr-recall restore --session-restore-app myapp  # treat myapp as a session-restore app
 hypr-recall status                    # show saved session summary
 hypr-recall edit                      # open session file in $EDITOR
-hypr-recall save --file ~/my-session.json
-hypr-recall restore --file ~/my-session.json
+hypr-recall save --file ~/my-session.json        # explicit path (overrides name)
 ```
 
-Default session file: `~/.local/share/hypr-recall/session.json`
+Sessions are stored as `~/.local/share/hypr-recall/<name>.json`. The default name is `session`.
 
 ## What gets saved
 
@@ -124,6 +126,27 @@ hl.bind("SUPER", "F12", "exec", "hypr-recall save")
   ]
 }
 ```
+
+## Config file
+
+Optional config at `~/.config/hypr-recall/config.toml`:
+
+```toml
+overlay = true              # show spinning overlay during restore (default: true)
+settle_delay_secs = 4       # seconds to wait before sweeping stray windows (default: 4)
+
+# add apps to the session-restore list beyond the built-in set
+session_restore_apps = ["my.electron.App"]
+
+# per-app settings
+[apps.firefox]
+launch_args = ["--profile", "~/.mozilla/work"]
+
+[apps.my.electron.App]
+session_restore = true
+```
+
+If the file doesn't exist, all defaults apply. Unknown keys are rejected to catch typos.
 
 ## Requirements
 

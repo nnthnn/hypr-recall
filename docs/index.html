@@ -401,11 +401,12 @@
         <span class="cmt"># add to hyprland.lua — restore on login</span><br>
         <span class="prompt">▸</span> <span class="cmd">hl.exec("hypr-recall restore")</span><br>
         <br>
-        <span class="cmt"># snapshot your session</span><br>
+        <span class="cmt"># snapshot your session (or give it a name)</span><br>
         <span class="prompt">▸</span> <span class="cmd">hypr-recall save</span><br>
+        <span class="prompt">▸</span> <span class="cmd">hypr-recall save work</span><br>
         <br>
-        <span class="cmt"># preview before committing</span><br>
-        <span class="prompt">▸</span> <span class="cmd">hypr-recall restore --dry-run</span><span class="cursor"></span>
+        <span class="cmt"># list all saved sessions</span><br>
+        <span class="prompt">▸</span> <span class="cmd">hypr-recall list</span><span class="cursor"></span>
       </code>
     </div>
 
@@ -454,20 +455,24 @@
         <p>RAII lock prevents concurrent restores from stomping on each other.</p>
       </div>
       <div class="feature">
+        <h3>Named sessions</h3>
+        <p>Save and restore multiple sessions by name — <code>hypr-recall save work</code>, <code>restore gaming</code>. <code>list</code> shows all saved sessions with age and window counts.</p>
+      </div>
+      <div class="feature">
         <h3>Auto-save hooks</h3>
         <p>Wire into <code>hl.on("hyprland.shutdown")</code> or a repeating timer — no keybind required.</p>
       </div>
       <div class="feature">
         <h3>Custom restore apps</h3>
-        <p>Add any app to the session-restore list with <code>--session-restore-app</code>.</p>
+        <p>Add any app to the session-restore list via <code>--session-restore-app</code> or the config file.</p>
       </div>
       <div class="feature">
         <h3>Active workspace</h3>
         <p>Saves and restores which workspace was focused when you saved.</p>
       </div>
       <div class="feature">
-        <h3>No config file</h3>
-        <p>All options are CLI flags. Configure entirely from your <code>hyprland.lua</code> callsite.</p>
+        <h3>Config file</h3>
+        <p>Optional <code>~/.config/hypr-recall/config.toml</code> for per-app launch args, session-restore overrides, and overlay toggle.</p>
       </div>
     </div>
 

@@ -1,15 +1,35 @@
 use anyhow::Result;
-use clap::{Parser, Subcommand};
+use clap::builder::styling::{Color, Effects, RgbColor, Style, Styles};
+use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
 use std::path::PathBuf;
 
+mod color;
 mod config;
 mod edit;
 mod hyprland;
+mod list;
 mod lock;
 mod restore;
 mod save;
 mod session;
 mod status;
+
+fn rgb(r: u8, g: u8, b: u8) -> Style {
+    Style::new().fg_color(Some(Color::Rgb(RgbColor(r, g, b))))
+}
+
+fn styles() -> Styles {
+    let orange = rgb(249, 115, 22) | Effects::BOLD; // #f97316
+    let purple = rgb(168, 85, 247) | Effects::BOLD; // #a855f7
+    Styles::styled()
+        .header(orange)
+        .usage(orange)
+        .literal(purple)
+        .placeholder(rgb(56, 189, 248)) // #38bdf8
+        .error(rgb(239, 68, 68) | Effects::BOLD) // #ef4444
+        .valid(rgb(34, 197, 94) | Effects::BOLD) // #22c55e
+        .invalid(rgb(234, 179, 8) | Effects::BOLD) // #eab308
+}
 
 #[derive(Parser)]
 #[command(
@@ -23,12 +43,18 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
+    /// Snapshot the current Hyprland session
     Save {
-        #[arg(short, long, help = "Path to session file")]
+        /// Session name (default: "session")
+        name: Option<String>,
+        #[arg(short, long, help = "Explicit path to session file (overrides name)")]
         file: Option<PathBuf>,
     },
+    /// Restore a saved session
     Restore {
-        #[arg(short, long, help = "Path to session file")]
+        /// Session name (default: "session")
+        name: Option<String>,
+        #[arg(short, long, help = "Explicit path to session file (overrides name)")]
         file: Option<PathBuf>,
         #[arg(long, help = "Print what would be restored without launching anything")]
         dry_run: bool,
@@ -40,51 +66,74 @@ enum Commands {
         )]
         session_restore_app: Vec<String>,
     },
+    /// List all saved sessions
+    List,
+    /// Show a summary of a saved session
     Status {
-        #[arg(short, long, help = "Path to session file")]
+        /// Session name (default: "session")
+        name: Option<String>,
+        #[arg(short, long, help = "Explicit path to session file (overrides name)")]
         file: Option<PathBuf>,
     },
+    /// Open a session file in $EDITOR
     Edit {
-        #[arg(short, long, help = "Path to session file")]
+        /// Session name (default: "session")
+        name: Option<String>,
+        #[arg(short, long, help = "Explicit path to session file (overrides name)")]
         file: Option<PathBuf>,
     },
 }
 
-fn default_path() -> PathBuf {
+fn session_dir() -> PathBuf {
     let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_owned());
-    PathBuf::from(home).join(".local/share/hypr-recall/session.json")
+    PathBuf::from(home).join(".local/share/hypr-recall")
+}
+
+fn session_path(name: Option<String>, file: Option<PathBuf>) -> PathBuf {
+    if let Some(p) = file {
+        return p;
+    }
+    let name = name.unwrap_or_else(|| "session".to_owned());
+    session_dir().join(format!("{name}.json"))
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let cli = Cli::parse();
+    let g: &'static str = color::gradient("hypr-recall").leak();
+    let cmd = Cli::command().styles(styles()).bin_name(g);
+    let mut matches = cmd.get_matches();
+    let cli = Cli::from_arg_matches_mut(&mut matches).unwrap_or_else(|e| e.exit());
 
     let cfg = config::Config::load()?;
 
     match cli.command {
-        Commands::Save { file } => {
-            let path = file.unwrap_or_else(default_path);
+        Commands::Save { name, file } => {
+            let path = session_path(name, file);
             save::run(&path)?;
         }
         Commands::Restore {
+            name,
             file,
             dry_run,
             session_restore_app,
         } => {
-            let path = file.unwrap_or_else(default_path);
+            let path = session_path(name, file);
             if dry_run {
                 restore::run_dry(&path, &session_restore_app, &cfg)?;
             } else {
                 restore::run(&path, &session_restore_app, &cfg).await?;
             }
         }
-        Commands::Status { file } => {
-            let path = file.unwrap_or_else(default_path);
+        Commands::Status { name, file } => {
+            let path = session_path(name, file);
             status::run(&path)?;
         }
-        Commands::Edit { file } => {
-            let path = file.unwrap_or_else(default_path);
+        Commands::Edit { name, file } => {
+            let path = session_path(name, file);
             edit::run(&path)?;
+        }
+        Commands::List => {
+            list::run(&session_dir())?;
         }
     }
 
