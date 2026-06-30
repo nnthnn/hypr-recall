@@ -1,8 +1,22 @@
 use std::io::IsTerminal;
 
-/// "hypr-recall" with orange→purple gradient when stdout is a TTY, plain otherwise.
+/// "hypr-recall" with orange→purple gradient, colorized when **stdout** is a
+/// TTY. Use at `println!` sites.
 pub fn hr() -> String {
-    gradient("hypr-recall")
+    colorize("hypr-recall", std::io::stdout().is_terminal())
+}
+
+/// "hypr-recall" with gradient, colorized when **stderr** is a TTY. Use at
+/// `eprintln!` sites so piping stdout doesn't strip color from a TTY stderr
+/// (or add it when stderr is redirected).
+pub fn hr_err() -> String {
+    colorize("hypr-recall", std::io::stderr().is_terminal())
+}
+
+/// Gradient `text`, colorized when stdout is a TTY. Used for the clap
+/// `bin_name`, which is rendered into help/usage written to stdout.
+pub fn gradient(text: &str) -> String {
+    colorize(text, std::io::stdout().is_terminal())
 }
 
 #[allow(
@@ -10,9 +24,9 @@ pub fn hr() -> String {
     clippy::cast_possible_truncation, // color values are bounded 0-255 by construction
     clippy::cast_sign_loss            // color values are non-negative by construction
 )]
-pub fn gradient(text: &str) -> String {
+fn colorize(text: &str, is_tty: bool) -> String {
     use std::fmt::Write as _;
-    if !std::io::stdout().is_terminal() {
+    if !is_tty {
         return text.to_owned();
     }
     let from = (249.0_f32, 115.0_f32, 22.0_f32); // orange #f97316
