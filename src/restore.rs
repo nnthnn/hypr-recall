@@ -337,6 +337,32 @@ pub fn plan_column_swaps(saved: &[&str], live: &mut Vec<LiveWindow>) -> Vec<(Str
     ops
 }
 
+/// Pairs each saved window with a live window of the same class, consuming live
+/// windows left to right, and returns the `(address, col_width)` ops to apply.
+///
+/// Matching by class rather than by index keeps widths aligned with the right
+/// columns even when a window failed to launch and `live` is shorter than
+/// `saved`: a saved entry with no surviving match is simply skipped instead of
+/// shifting every subsequent width onto the wrong window.
+pub fn plan_width_assignments(saved: &[(&str, f64)], live: &[LiveWindow]) -> Vec<(String, f64)> {
+    let mut consumed = vec![false; live.len()];
+    let mut ops = Vec::new();
+
+    for &(class, width) in saved {
+        let Some(idx) = live
+            .iter()
+            .enumerate()
+            .position(|(i, w)| !consumed[i] && w.class == class)
+        else {
+            continue;
+        };
+        consumed[idx] = true;
+        ops.push((live[idx].address.clone(), width));
+    }
+
+    ops
+}
+
 /// After all workspaces are restored, some apps (e.g. Discord) open late windows
 /// that land on the wrong workspace because focus has already moved on. Walk every
 /// live client: if its class belongs to a workspace in the session and it ended up
@@ -414,17 +440,26 @@ async fn reorder_columns(ws_id: i32, ws_entry: &crate::session::WorkspaceEntry) 
         }
     }
 
-    // Apply col_width ratios in final sorted order
+    // Apply col_width ratios, matching saved entries to live windows by class
     sleep(Duration::from_millis(200)).await;
-    let live_final = hyprland::get_workspace_clients_sorted(ws_id)?;
+    let live_final: Vec<LiveWindow> = hyprland::get_workspace_clients_sorted(ws_id)?
+        .iter()
+        .map(|c| LiveWindow {
+            address: c.address.clone(),
+            class: c.initial_class.clone(),
+        })
+        .collect();
 
-    for (i, window) in ws_entry.windows.iter().enumerate() {
-        let Some(live_win) = live_final.get(i) else {
-            continue;
-        };
-        hyprland::focus_window(&live_win.address)?;
+    let saved_widths: Vec<(&str, f64)> = ws_entry
+        .windows
+        .iter()
+        .map(|w| (w.class.as_str(), w.col_width))
+        .collect();
+
+    for (addr, width) in plan_width_assignments(&saved_widths, &live_final) {
+        hyprland::focus_window(&addr)?;
         sleep(Duration::from_millis(200)).await;
-        hyprland::colresize(window.col_width)?;
+        hyprland::colresize(width)?;
         sleep(Duration::from_millis(200)).await;
     }
 
@@ -521,5 +556,46 @@ mod tests {
         ];
         plan_column_swaps(&saved, &mut live);
         assert_eq!(classes(&live), saved);
+    }
+
+    #[test]
+    fn widths_assigned_in_order_when_all_present() {
+        let saved = [("a", 0.5), ("b", 0.3), ("c", 0.2)];
+        let live = vec![lw("0x1", "a"), lw("0x2", "b"), lw("0x3", "c")];
+        let ops = plan_width_assignments(&saved, &live);
+        assert_eq!(
+            ops,
+            vec![
+                ("0x1".to_owned(), 0.5),
+                ("0x2".to_owned(), 0.3),
+                ("0x3".to_owned(), 0.2),
+            ]
+        );
+    }
+
+    #[test]
+    fn missing_middle_window_keeps_remaining_widths_aligned() {
+        // Saved [a, b, c] but b failed to launch — c must still get c's width,
+        // not b's (the old index-based zip applied b's width to c).
+        let saved = [("a", 0.5), ("b", 0.3), ("c", 0.2)];
+        let live = vec![lw("0x1", "a"), lw("0x3", "c")];
+        let ops = plan_width_assignments(&saved, &live);
+        assert_eq!(ops, vec![("0x1".to_owned(), 0.5), ("0x3".to_owned(), 0.2)]);
+    }
+
+    #[test]
+    fn duplicate_classes_consumed_left_to_right() {
+        let saved = [("ghostty", 0.6), ("ghostty", 0.4)];
+        let live = vec![lw("0x1", "ghostty"), lw("0x2", "ghostty")];
+        let ops = plan_width_assignments(&saved, &live);
+        assert_eq!(ops, vec![("0x1".to_owned(), 0.6), ("0x2".to_owned(), 0.4)]);
+    }
+
+    #[test]
+    fn extra_live_window_is_left_untouched() {
+        let saved = [("a", 0.5)];
+        let live = vec![lw("0x1", "a"), lw("0x2", "b")];
+        let ops = plan_width_assignments(&saved, &live);
+        assert_eq!(ops, vec![("0x1".to_owned(), 0.5)]);
     }
 }
