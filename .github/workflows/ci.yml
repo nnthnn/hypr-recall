@@ -10,13 +10,14 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  # Core binary: format, lint (warnings = errors), test.
   ci:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@1.96.0
         with:
           components: rustfmt, clippy
 
@@ -27,7 +28,58 @@ jobs:
         run: cargo fmt --check
 
       - name: Clippy
-        run: cargo clippy --all-targets
+        run: cargo clippy --all-targets -- -D warnings
 
       - name: Test
         run: cargo test
+
+  # Overlay binary: gated behind the `overlay` feature, so it needs gtk4
+  # system deps and is invisible to the core job's `--all-targets`.
+  overlay:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install gtk4 + build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-4-dev libwayland-dev meson ninja-build
+
+      # gtk4-layer-shell isn't packaged for Ubuntu 24.04 (ubuntu-latest), so
+      # build the latest release from source into /usr where pkg-config finds it.
+      - name: Build gtk4-layer-shell from source
+        run: |
+          tag=$(git -c versionsort.suffix=- ls-remote --tags --sort=-v:refname \
+            https://github.com/wmww/gtk4-layer-shell.git 'v*' \
+            | head -1 | sed 's@.*refs/tags/@@')
+          echo "Building gtk4-layer-shell $tag"
+          git clone --depth 1 --branch "$tag" https://github.com/wmww/gtk4-layer-shell.git
+          cd gtk4-layer-shell
+          meson setup build --prefix=/usr \
+            -Dexamples=false -Ddocs=false -Dtests=false -Dintrospection=false -Dvapi=false
+          ninja -C build
+          sudo ninja -C build install
+          sudo ldconfig
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@1.96.0
+        with:
+          components: clippy
+
+      - name: Cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Clippy (overlay feature)
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Test (all features)
+        run: cargo test --all-features
+
+  # Dependency advisory audit (RUSTSEC).
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check advisories

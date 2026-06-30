@@ -16,15 +16,26 @@ No existing tool restores column positions and widths in scrolling layouts — h
 
 ## Install
 
+The restore overlay is an optional second binary (`hypr-recall-overlay`) gated
+behind the `overlay` cargo feature, which needs `gtk4` and `gtk4-layer-shell`
+installed. Build with `--all-features` to include it, or drop the flag for the
+core binary only.
+
+**With [`just`](https://github.com/casey/just)** (simplest):
+```fish
+just install-all   # core + overlay into ~/.cargo/bin (needs gtk4 / gtk4-layer-shell)
+just install       # core binary only
+```
+
 **User-local** (no elevated privileges):
 ```fish
-cargo build --release
+cargo build --release --all-features
 cp target/release/hypr-recall target/release/hypr-recall-overlay ~/.local/bin/
 ```
 
 **System-wide:**
 ```fish
-cargo build --release
+cargo build --release --all-features
 sudo install -Dm755 target/release/hypr-recall target/release/hypr-recall-overlay /usr/local/bin/
 ```
 
@@ -147,6 +158,21 @@ session_restore = true
 ```
 
 If the file doesn't exist, all defaults apply. Unknown keys are rejected to catch typos.
+
+## Development
+
+The toolchain is pinned via `rust-toolchain.toml`. Common tasks are wrapped in a
+[`justfile`](https://github.com/casey/just) — run `just` to list them:
+
+```fish
+just check       # fmt --check + clippy (-D warnings) + test  — run before every PR
+just check-all   # same, plus the overlay feature (needs gtk4 / gtk4-layer-shell)
+just fmt         # apply formatting
+just audit       # cargo-deny advisory check (needs cargo-deny)
+```
+
+CI mirrors these: a core job (`fmt`/`clippy`/`test`), an overlay job that builds
+and lints the `overlay` feature against gtk4, and a dependency advisory audit.
 
 ## Requirements
 
