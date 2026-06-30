@@ -60,6 +60,63 @@ fn spawn_overlay() -> Option<OverlayHandle> {
     Some(OverlayHandle { child, stdin })
 }
 
+/// One app class's launch plan for a single workspace. Shared by `run` (real
+/// restore) and `run_dry` (preview) so both agree on what gets launched.
+#[derive(Debug, PartialEq)]
+pub struct ClassPlan {
+    pub class: String,
+    pub exe: String,
+    pub launch_args: Vec<String>,
+    pub saved_count: usize,
+    pub pre: usize,
+    pub needed: usize,
+    pub session_restore: bool,
+}
+
+/// Build the per-class plan for a workspace, in saved column order, deduplicated
+/// by class (first occurrence wins for `exe`/`launch_args`). `pre_existing` is
+/// the count of already-open windows per class, snapshotted once before any
+/// workspace is restored.
+fn plan_workspace(
+    ws_entry: &crate::session::WorkspaceEntry,
+    pre_existing: &HashMap<String, usize>,
+    cfg: &Config,
+    extra_restore_apps: &[String],
+) -> Vec<ClassPlan> {
+    let mut processed: HashSet<String> = HashSet::new();
+    let mut plans = Vec::new();
+
+    for window in &ws_entry.windows {
+        let class = &window.class;
+        if !processed.insert(class.clone()) {
+            continue;
+        }
+
+        let saved_count = ws_entry
+            .windows
+            .iter()
+            .filter(|w| &w.class == class)
+            .count();
+        let pre = pre_existing.get(class).copied().unwrap_or(0);
+
+        plans.push(ClassPlan {
+            class: class.clone(),
+            exe: window.exe.trim_end_matches(" (deleted)").to_owned(),
+            launch_args: cfg.launch_args(class, window.launch_args.as_ref()).to_vec(),
+            saved_count,
+            pre,
+            needed: saved_count.saturating_sub(pre),
+            session_restore: cfg.is_session_restore_app(
+                class,
+                SESSION_RESTORE_APPS,
+                extra_restore_apps,
+            ),
+        });
+    }
+
+    plans
+}
+
 pub async fn run(path: &Path, extra_restore_apps: &[String], cfg: &Config) -> Result<()> {
     if !path.exists() {
         eprintln!(
@@ -110,29 +167,15 @@ pub async fn run(path: &Path, extra_restore_apps: &[String], cfg: &Config) -> Re
         hyprland::focus_workspace(ws_id)?;
         sleep(Duration::from_millis(200)).await;
 
-        // Deduplicate within this workspace (same class processed once)
-        let mut processed: HashSet<String> = HashSet::new();
-
-        for window in &ws_entry.windows {
-            let class = &window.class;
-
-            if processed.contains(class) {
-                continue;
-            }
-            processed.insert(class.clone());
-
-            // Count saved windows of this class on this workspace
-            let saved_count = ws_entry
-                .windows
-                .iter()
-                .filter(|w| &w.class == class)
-                .count();
-
-            let pre = pre_existing.get(class).copied().unwrap_or(0);
-            let needed = saved_count.saturating_sub(pre);
+        for plan in plan_workspace(ws_entry, &pre_existing, cfg, extra_restore_apps) {
+            let class = &plan.class;
+            let needed = plan.needed;
 
             if needed == 0 {
-                crate::debug!("  {class}: skipped (pre-existing covers all {saved_count})");
+                crate::debug!(
+                    "  {class}: skipped (pre-existing covers all {})",
+                    plan.saved_count
+                );
                 continue;
             }
 
@@ -141,19 +184,19 @@ pub async fn run(path: &Path, extra_restore_apps: &[String], cfg: &Config) -> Re
                 .filter(|c| &c.initial_class == class)
                 .count();
 
-            let exe = window.exe.trim_end_matches(" (deleted)");
+            let exe = plan.exe.as_str();
             let target_total = before_total + needed;
 
             crate::debug!(
-                "  {class}: saved={saved_count} pre={pre} needed={needed} before={before_total}"
+                "  {class}: saved={} pre={} needed={needed} before={before_total}",
+                plan.saved_count,
+                plan.pre
             );
 
-            let launch_args = cfg.launch_args(class, window.launch_args.as_ref());
-
-            if cfg.is_session_restore_app(class, SESSION_RESTORE_APPS, extra_restore_apps) {
+            if plan.session_restore {
                 // Launch once; the app restores all its windows itself
                 let mut child = tokio::process::Command::new(exe)
-                    .args(launch_args)
+                    .args(&plan.launch_args)
                     .stdin(Stdio::null())
                     .stdout(Stdio::null())
                     .stderr(Stdio::null())
@@ -182,7 +225,7 @@ pub async fn run(path: &Path, extra_restore_apps: &[String], cfg: &Config) -> Re
                     }
 
                     let mut child = tokio::process::Command::new(exe)
-                        .args(launch_args)
+                        .args(&plan.launch_args)
                         .stdin(Stdio::null())
                         .stdout(Stdio::null())
                         .stderr(Stdio::null())
@@ -257,33 +300,19 @@ pub fn run_dry(path: &Path, extra_restore_apps: &[String], cfg: &Config) -> Resu
             if ws_entry.windows.len() == 1 { "" } else { "s" },
         );
 
-        let mut processed: HashSet<String> = HashSet::new();
+        for plan in plan_workspace(ws_entry, &pre_existing, cfg, extra_restore_apps) {
+            let class = &plan.class;
+            let needed = plan.needed;
 
-        for window in &ws_entry.windows {
-            let class = &window.class;
-            if processed.contains(class) {
-                continue;
-            }
-            processed.insert(class.clone());
-
-            let saved_count = ws_entry
-                .windows
-                .iter()
-                .filter(|w| &w.class == class)
-                .count();
-            let pre = pre_existing.get(class).copied().unwrap_or(0);
-            let needed = saved_count.saturating_sub(pre);
-
-            let launch_args = cfg.launch_args(class, window.launch_args.as_ref());
-            let args_suffix = if launch_args.is_empty() {
+            let args_suffix = if plan.launch_args.is_empty() {
                 String::new()
             } else {
-                format!(" [args: {}]", launch_args.join(" "))
+                format!(" [args: {}]", plan.launch_args.join(" "))
             };
 
             if needed == 0 {
-                println!("    {class:<40} → skip ({pre} already open)");
-            } else if cfg.is_session_restore_app(class, SESSION_RESTORE_APPS, extra_restore_apps) {
+                println!("    {class:<40} → skip ({} already open)", plan.pre);
+            } else if plan.session_restore {
                 println!(
                     "    {class:<40} → launch 1  [session-restore, waits for {needed} window{}]{args_suffix}",
                     if needed == 1 { "" } else { "s" }
@@ -602,5 +631,89 @@ mod tests {
         let live = vec![lw("0x1", "a"), lw("0x2", "b")];
         let ops = plan_width_assignments(&saved, &live);
         assert_eq!(ops, vec![("0x1".to_owned(), 0.5)]);
+    }
+
+    fn win(class: &str, exe: &str) -> crate::session::WindowEntry {
+        crate::session::WindowEntry {
+            class: class.into(),
+            exe: exe.into(),
+            launch_args: None,
+            col_width: 0.5,
+        }
+    }
+
+    fn ws(windows: Vec<crate::session::WindowEntry>) -> crate::session::WorkspaceEntry {
+        crate::session::WorkspaceEntry {
+            workspace: 1,
+            windows,
+        }
+    }
+
+    #[test]
+    fn plan_dedups_by_class_and_counts_saved() {
+        let entry = ws(vec![
+            win("ghostty", "/usr/bin/ghostty"),
+            win("ghostty", "/usr/bin/ghostty"),
+            win("firefox", "/usr/lib/firefox"),
+        ]);
+        let plans = plan_workspace(&entry, &HashMap::new(), &Config::default(), &[]);
+
+        assert_eq!(plans.len(), 2, "duplicate class collapses to one plan");
+        assert_eq!(plans[0].class, "ghostty", "column order preserved");
+        assert_eq!(plans[0].saved_count, 2);
+        assert_eq!(plans[0].needed, 2);
+        assert_eq!(plans[1].class, "firefox");
+        assert_eq!(plans[1].saved_count, 1);
+    }
+
+    #[test]
+    fn plan_subtracts_pre_existing_and_saturates() {
+        let entry = ws(vec![
+            win("ghostty", "/usr/bin/ghostty"),
+            win("ghostty", "/usr/bin/ghostty"),
+            win("firefox", "/usr/lib/firefox"),
+        ]);
+        let pre = HashMap::from([("ghostty".to_owned(), 1), ("firefox".to_owned(), 3)]);
+        let plans = plan_workspace(&entry, &pre, &Config::default(), &[]);
+
+        assert_eq!(plans[0].pre, 1);
+        assert_eq!(plans[0].needed, 1, "2 saved - 1 pre");
+        assert_eq!(plans[1].needed, 0, "1 saved - 3 pre saturates to 0");
+    }
+
+    #[test]
+    fn plan_flags_builtin_session_restore_apps() {
+        let entry = ws(vec![
+            win("firefox", "/usr/lib/firefox"),
+            win("ghostty", "/usr/bin/ghostty"),
+        ]);
+        let plans = plan_workspace(&entry, &HashMap::new(), &Config::default(), &[]);
+
+        assert!(plans[0].session_restore, "firefox is a built-in");
+        assert!(!plans[1].session_restore, "ghostty is not");
+    }
+
+    #[test]
+    fn plan_resolves_config_launch_args_over_session() {
+        let mut cfg = Config::default();
+        cfg.apps.insert(
+            "firefox".to_owned(),
+            crate::config::AppConfig {
+                launch_args: vec!["--profile".to_owned(), "/work".to_owned()],
+                session_restore: false,
+            },
+        );
+        let mut window = win("firefox", "/usr/lib/firefox");
+        window.launch_args = Some(vec!["--ignored".to_owned()]);
+        let plans = plan_workspace(&ws(vec![window]), &HashMap::new(), &cfg, &[]);
+
+        assert_eq!(plans[0].launch_args, vec!["--profile", "/work"]);
+    }
+
+    #[test]
+    fn plan_trims_deleted_suffix_from_exe() {
+        let entry = ws(vec![win("firefox", "/usr/lib/firefox (deleted)")]);
+        let plans = plan_workspace(&entry, &HashMap::new(), &Config::default(), &[]);
+        assert_eq!(plans[0].exe, "/usr/lib/firefox");
     }
 }
