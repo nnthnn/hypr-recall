@@ -132,7 +132,7 @@ pub async fn run(path: &Path, extra_restore_apps: &[String], cfg: &Config) -> Re
             let needed = saved_count.saturating_sub(pre);
 
             if needed == 0 {
-                println!("  {class}: skipped (pre-existing covers all {saved_count})");
+                crate::debug!("  {class}: skipped (pre-existing covers all {saved_count})");
                 continue;
             }
 
@@ -144,7 +144,7 @@ pub async fn run(path: &Path, extra_restore_apps: &[String], cfg: &Config) -> Re
             let exe = window.exe.trim_end_matches(" (deleted)");
             let target_total = before_total + needed;
 
-            println!(
+            crate::debug!(
                 "  {class}: saved={saved_count} pre={pre} needed={needed} before={before_total}"
             );
 
@@ -164,7 +164,7 @@ pub async fn run(path: &Path, extra_restore_apps: &[String], cfg: &Config) -> Re
                 let got = events
                     .wait_for_count(class, needed, deadline, Some(&mut child))
                     .await;
-                println!(
+                crate::debug!(
                     "  {class}: {got}/{needed} windows appeared (total: {})",
                     before_total + got
                 );
@@ -177,7 +177,7 @@ pub async fn run(path: &Path, extra_restore_apps: &[String], cfg: &Config) -> Re
                         .count();
 
                     if current >= target_total {
-                        println!("  {class} launch {launch_n}/{needed}: already at {current}");
+                        crate::debug!("  {class} launch {launch_n}/{needed}: already at {current}");
                         continue;
                     }
 
@@ -325,13 +325,13 @@ pub fn plan_column_swaps(saved: &[&str], live: &mut Vec<LiveWindow>) -> Vec<(Str
             .map(|(j, _)| j);
 
         let Some(target_pos) = target_pos else {
-            eprintln!("  reorder: no {expected} found after position {i}, skipping");
+            crate::debug!("  reorder: no {expected} found after position {i}, skipping");
             continue;
         };
 
         let steps = target_pos - i;
         let addr = live[target_pos].address.clone();
-        println!("  reorder: bubble {expected} from col {target_pos} → {i} ({steps} swap(s))");
+        crate::debug!("  reorder: bubble {expected} from col {target_pos} → {i} ({steps} swap(s))");
         ops.push((addr, steps));
 
         let item = live.remove(target_pos);
@@ -401,9 +401,10 @@ async fn fix_stray_windows(session: &crate::session::Session, settle_secs: u64) 
         }
         // Window is on a workspace it doesn't belong to — move it silently.
         let target = valid_workspaces[0];
-        println!(
+        crate::debug!(
             "  fix: {} strayed to ws{} → moving to ws{target}",
-            client.initial_class, client.workspace_id
+            client.initial_class,
+            client.workspace_id
         );
         hyprland::move_to_workspace_silent(&client.address, target)?;
         sleep(Duration::from_millis(100)).await;

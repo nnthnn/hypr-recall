@@ -48,6 +48,7 @@ hypr-recall restore                   # restore default session
 hypr-recall restore work              # restore named session
 hypr-recall list                      # list all saved sessions with age and window counts
 hypr-recall restore --dry-run         # preview what would be restored
+hypr-recall restore -v                # verbose diagnostics on stderr (launch counts, column swaps)
 hypr-recall restore --session-restore-app myapp  # treat myapp as a session-restore app
 hypr-recall status                    # show saved session summary
 hypr-recall edit                      # open session file in $EDITOR
