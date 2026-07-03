@@ -58,6 +58,13 @@ enum Commands {
         name: Option<String>,
         #[arg(short, long, help = "Explicit path to session file (overrides name)")]
         file: Option<PathBuf>,
+        #[arg(
+            short = 'w',
+            long,
+            value_name = "ID",
+            help = "Save only this workspace, merged into the existing session file"
+        )]
+        workspace: Option<i32>,
     },
     /// Restore a saved session
     Restore {
@@ -126,9 +133,13 @@ async fn main() -> Result<()> {
     let cfg = config::Config::load()?;
 
     match cli.command {
-        Commands::Save { name, file } => {
+        Commands::Save {
+            name,
+            file,
+            workspace,
+        } => {
             let path = session_path(name, file);
-            save::run(&path)?;
+            save::run(&path, workspace)?;
         }
         Commands::Restore {
             name,
