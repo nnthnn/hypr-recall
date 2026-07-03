@@ -463,6 +463,22 @@
     workspace you asked about. It minds its own business, mostly.
   </p>
 
+  <p>
+    Saving works the same way, and for the same reason: maybe you only
+    reshuffled workspace 2 and would like the rest of the saved session to
+    remain exactly as it was, thank you very much.
+  </p>
+
+  <pre><code><span class="prompt">▸</span> <span class="hi">hypr-recall save work --workspace 2</span></code></pre>
+
+  <p>
+    Only workspace 2 is re-captured and merged into the <code>work</code>
+    session file — the other saved workspaces are left precisely as they
+    were. Close every window on workspace 2 first and it is quietly removed
+    from the file instead, on the theory that an empty workspace is not a
+    workspace worth remembering.
+  </p>
+
   <h3>Watching the gears turn</h3>
 
   <p>
