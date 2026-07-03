@@ -51,6 +51,20 @@ impl Session {
         std::fs::rename(&tmp, path)?;
         Ok(())
     }
+
+    /// Replace, insert, or remove the `workspace_id` entry in `workspaces`.
+    /// `entry: None` removes any existing entry for `workspace_id` (a no-op
+    /// if it wasn't present). `entry: Some(..)` replaces the existing entry
+    /// or inserts a new one, keeping `workspaces` sorted by workspace id.
+    pub fn merge_workspace(&mut self, workspace_id: i32, entry: Option<WorkspaceEntry>) {
+        self.workspaces.retain(|w| w.workspace != workspace_id);
+        if let Some(entry) = entry {
+            let pos = self
+                .workspaces
+                .partition_point(|w| w.workspace < workspace_id);
+            self.workspaces.insert(pos, entry);
+        }
+    }
 }
 
 #[cfg(test)]
@@ -178,5 +192,71 @@ mod tests {
         let session = Session::load(&path).unwrap();
         assert_eq!(session.workspaces[0].windows[0].launch_args, None);
         std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn merge_workspace_replaces_existing_entry() {
+        let mut session = sample();
+        let replacement = WorkspaceEntry {
+            workspace: 2,
+            windows: vec![WindowEntry {
+                class: "new-app".into(),
+                exe: "/usr/bin/new-app".into(),
+                launch_args: None,
+                col_width: 0.75,
+            }],
+        };
+        session.merge_workspace(2, Some(replacement.clone()));
+        assert_eq!(session.workspaces.len(), 2);
+        assert_eq!(session.workspaces[1], replacement);
+    }
+
+    #[test]
+    fn merge_workspace_removes_entry_on_none() {
+        let mut session = sample();
+        session.merge_workspace(2, None);
+        assert_eq!(session.workspaces.len(), 1);
+        assert_eq!(session.workspaces[0].workspace, 1);
+    }
+
+    #[test]
+    fn merge_workspace_none_on_missing_id_is_noop() {
+        let mut session = sample();
+        session.merge_workspace(99, None);
+        assert_eq!(session.workspaces.len(), 2);
+    }
+
+    #[test]
+    fn merge_workspace_inserts_sorted_between_existing() {
+        let mut session = sample(); // workspaces [1, 2]
+        session.workspaces[1].workspace = 5; // now [1, 5]
+        let inserted = WorkspaceEntry {
+            workspace: 2,
+            windows: vec![],
+        };
+        session.merge_workspace(2, Some(inserted.clone()));
+        assert_eq!(
+            session
+                .workspaces
+                .iter()
+                .map(|w| w.workspace)
+                .collect::<Vec<_>>(),
+            vec![1, 2, 5]
+        );
+    }
+
+    #[test]
+    fn merge_workspace_inserts_into_empty_session() {
+        let mut session = Session {
+            version: SESSION_VERSION,
+            active_workspace: 1,
+            workspaces: vec![],
+        };
+        let entry = WorkspaceEntry {
+            workspace: 3,
+            windows: vec![],
+        };
+        session.merge_workspace(3, Some(entry.clone()));
+        assert_eq!(session.workspaces, vec![entry]);
     }
 }
