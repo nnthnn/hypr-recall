@@ -137,31 +137,26 @@ fn run_scoped(path: &Path, name: &str, id: i32) -> Result<()> {
     };
 
     let had_entry = session.workspaces.iter().any(|w| w.workspace == id);
+    let count = captured.as_ref().map(|entry| entry.windows.len());
+    session.merge_workspace(id, captured);
 
-    match captured {
-        Some(entry) => {
-            let count = entry.windows.len();
-            session.merge_workspace(id, Some(entry));
-            session.save_to(path)?;
-            println!(
-                "{}: saved workspace {id} to '{name}' — {count} windows (workspace {id} only)",
-                crate::color::hr(),
-            );
-        }
-        None if had_entry => {
-            session.merge_workspace(id, None);
-            session.save_to(path)?;
-            println!(
-                "{}: workspace {id} has no windows, removed from '{name}'",
-                crate::color::hr(),
-            );
-        }
-        None => {
-            println!(
-                "{}: workspace {id} has no windows, nothing to save",
-                crate::color::hr(),
-            );
-        }
+    if let Some(count) = count {
+        session.save_to(path)?;
+        println!(
+            "{}: saved workspace {id} to '{name}' — {count} windows (workspace {id} only)",
+            crate::color::hr(),
+        );
+    } else if had_entry {
+        session.save_to(path)?;
+        println!(
+            "{}: workspace {id} has no windows, removed from '{name}'",
+            crate::color::hr(),
+        );
+    } else {
+        println!(
+            "{}: workspace {id} has no windows, nothing to save",
+            crate::color::hr(),
+        );
     }
 
     Ok(())
