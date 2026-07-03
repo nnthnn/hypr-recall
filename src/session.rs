@@ -51,6 +51,25 @@ impl Session {
         std::fs::rename(&tmp, path)?;
         Ok(())
     }
+
+    /// Replace, insert, or remove the `workspace_id` entry in `workspaces`.
+    /// `entry: None` removes any existing entry for `workspace_id` (a no-op
+    /// if it wasn't present). `entry: Some(..)` replaces the existing entry
+    /// or inserts a new one, keeping `workspaces` sorted by workspace id.
+    ///
+    /// This does not assume `workspaces` is already sorted on entry — the
+    /// session file can be hand-edited (e.g. via `hypr-recall edit`) with no
+    /// re-validation, so a stale binary search over an unsorted or
+    /// duplicate-id vec would silently insert at the wrong position. Instead
+    /// this re-sorts by workspace id after inserting, which is correct
+    /// regardless of the input order.
+    pub fn merge_workspace(&mut self, workspace_id: i32, entry: Option<WorkspaceEntry>) {
+        self.workspaces.retain(|w| w.workspace != workspace_id);
+        if let Some(entry) = entry {
+            self.workspaces.push(entry);
+            self.workspaces.sort_by_key(|w| w.workspace);
+        }
+    }
 }
 
 #[cfg(test)]
@@ -178,5 +197,112 @@ mod tests {
         let session = Session::load(&path).unwrap();
         assert_eq!(session.workspaces[0].windows[0].launch_args, None);
         std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn merge_workspace_replaces_existing_entry() {
+        let mut session = sample();
+        let replacement = WorkspaceEntry {
+            workspace: 2,
+            windows: vec![WindowEntry {
+                class: "new-app".into(),
+                exe: "/usr/bin/new-app".into(),
+                launch_args: None,
+                col_width: 0.75,
+            }],
+        };
+        session.merge_workspace(2, Some(replacement.clone()));
+        assert_eq!(session.workspaces.len(), 2);
+        assert_eq!(session.workspaces[1], replacement);
+    }
+
+    #[test]
+    fn merge_workspace_removes_entry_on_none() {
+        let mut session = sample();
+        session.merge_workspace(2, None);
+        assert_eq!(session.workspaces.len(), 1);
+        assert_eq!(session.workspaces[0].workspace, 1);
+    }
+
+    #[test]
+    fn merge_workspace_none_on_missing_id_is_noop() {
+        let mut session = sample();
+        session.merge_workspace(99, None);
+        assert_eq!(session.workspaces.len(), 2);
+    }
+
+    #[test]
+    fn merge_workspace_inserts_sorted_between_existing() {
+        let mut session = sample(); // workspaces [1, 2]
+        session.workspaces[1].workspace = 5; // now [1, 5]
+        let inserted = WorkspaceEntry {
+            workspace: 2,
+            windows: vec![],
+        };
+        session.merge_workspace(2, Some(inserted.clone()));
+        assert_eq!(
+            session
+                .workspaces
+                .iter()
+                .map(|w| w.workspace)
+                .collect::<Vec<_>>(),
+            vec![1, 2, 5]
+        );
+    }
+
+    #[test]
+    fn merge_workspace_inserts_correctly_when_workspaces_are_unsorted() {
+        // Simulates a hand-edited session file where `workspaces` is not
+        // sorted ascending by id — nothing enforces that invariant on load.
+        // A binary search (`partition_point`) over `[3, 1]` for an insert of
+        // `2` is undefined behavior for sorted-input algorithms and returns
+        // an incorrect position (verified empirically: it returns index 2,
+        // producing `[3, 1, 2]` — workspace 2 landing at the very end,
+        // after 3, instead of between 1 and 3). The fix must not depend on
+        // the input already being sorted.
+        let mut session = Session {
+            version: SESSION_VERSION,
+            active_workspace: 1,
+            workspaces: vec![
+                WorkspaceEntry {
+                    workspace: 3,
+                    windows: vec![],
+                },
+                WorkspaceEntry {
+                    workspace: 1,
+                    windows: vec![],
+                },
+            ],
+        };
+        let inserted = WorkspaceEntry {
+            workspace: 2,
+            windows: vec![],
+        };
+        session.merge_workspace(2, Some(inserted.clone()));
+        assert_eq!(
+            session
+                .workspaces
+                .iter()
+                .map(|w| w.workspace)
+                .collect::<Vec<_>>(),
+            vec![1, 2, 3],
+            "expected workspace 2 to land between 1 and 3 even though the \
+             input vec was unsorted"
+        );
+    }
+
+    #[test]
+    fn merge_workspace_inserts_into_empty_session() {
+        let mut session = Session {
+            version: SESSION_VERSION,
+            active_workspace: 1,
+            workspaces: vec![],
+        };
+        let entry = WorkspaceEntry {
+            workspace: 3,
+            windows: vec![],
+        };
+        session.merge_workspace(3, Some(entry.clone()));
+        assert_eq!(session.workspaces, vec![entry]);
     }
 }
