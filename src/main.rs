@@ -47,6 +47,13 @@ struct Cli {
         help = "Print verbose diagnostic output (to stderr)"
     )]
     verbose: bool,
+    #[arg(
+        short,
+        long,
+        global = true,
+        help = "Suppress high-level progress output (warnings/errors still print)"
+    )]
+    quiet: bool,
     #[command(subcommand)]
     command: Commands,
 }
@@ -137,6 +144,7 @@ async fn main() -> Result<()> {
     let mut matches = cmd.get_matches();
     let cli = Cli::from_arg_matches_mut(&mut matches).unwrap_or_else(|e| e.exit());
     log::set_verbose(cli.verbose);
+    log::set_quiet(cli.quiet);
 
     let cfg = config::Config::load()?;
 

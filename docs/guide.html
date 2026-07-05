@@ -496,6 +496,22 @@
     terminal serene while quietly writing the whole confession to a file.
   </p>
 
+  <p>
+    Or go the other way. A restore launched from <code>hyprland.lua</code>
+    on login has no terminal to narrate to anyway — its broad-strokes
+    progress lines just vanish into Hyprland's own log, unread and
+    unloved. Tell it to stop bothering with <code>--quiet</code> (or
+    <code>-q</code>):
+  </p>
+
+  <pre><code><span class="prompt">▸</span> <span class="hi">hypr-recall restore -q</span></code></pre>
+
+  <p>
+    Warnings and errors still get through — quiet mode only silences the
+    happy path. A restore that goes well says nothing at all, which is,
+    upon reflection, exactly what you asked for.
+  </p>
+
   <!-- ═══════════════════════════════════════════════════ -->
   <span class="chapter-num">04</span>
   <h2>Special Cases & Strange Apps</h2>

@@ -116,7 +116,7 @@ fn run_full(path: &Path, name: &str) -> Result<()> {
     };
 
     session.save_to(path)?;
-    println!(
+    crate::progress!(
         "{}: saved '{name}' — {} windows across {} workspaces",
         crate::color::hr(),
         total_windows,
@@ -148,20 +148,20 @@ fn run_scoped(path: &Path, name: &str, id: i32) -> Result<()> {
     match outcome {
         ScopedOutcome::Saved(count) => {
             session.save_to(path)?;
-            println!(
+            crate::progress!(
                 "{}: saved workspace {id} to '{name}' — {count} windows (workspace {id} only)",
                 crate::color::hr(),
             );
         }
         ScopedOutcome::Removed => {
             session.save_to(path)?;
-            println!(
+            crate::progress!(
                 "{}: workspace {id} has no windows, removed from '{name}'",
                 crate::color::hr(),
             );
         }
         ScopedOutcome::NoOp => {
-            println!(
+            crate::progress!(
                 "{}: workspace {id} has no windows, nothing to save",
                 crate::color::hr(),
             );
