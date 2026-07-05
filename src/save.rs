@@ -49,10 +49,14 @@ fn capture_workspaces(only_workspace: Option<i32>) -> Result<Vec<WorkspaceEntry>
         ));
     }
 
-    // Sort by workspace then x-position
+    Ok(group_into_workspaces(rows))
+}
+
+/// Sort `(workspace_id, x_position, entry)` rows and group them into
+/// `WorkspaceEntry`s, preserving left-to-right window order within each.
+fn group_into_workspaces(mut rows: Vec<(i32, i32, WindowEntry)>) -> Vec<WorkspaceEntry> {
     rows.sort_by_key(|(ws, x, _)| (*ws, *x));
 
-    // Group into workspaces
     let mut workspaces: Vec<WorkspaceEntry> = Vec::new();
     let mut current_ws: Option<WorkspaceEntry> = None;
 
@@ -74,7 +78,7 @@ fn capture_workspaces(only_workspace: Option<i32>) -> Result<Vec<WorkspaceEntry>
         workspaces.push(ws);
     }
 
-    Ok(workspaces)
+    workspaces
 }
 
 pub fn run(path: &Path, only_workspace: Option<i32>) -> Result<()> {
@@ -138,26 +142,116 @@ fn run_scoped(path: &Path, name: &str, id: i32) -> Result<()> {
 
     let had_entry = session.workspaces.iter().any(|w| w.workspace == id);
     let count = captured.as_ref().map(|entry| entry.windows.len());
+    let outcome = scoped_outcome(had_entry, count);
     session.merge_workspace(id, captured);
 
-    if let Some(count) = count {
-        session.save_to(path)?;
-        println!(
-            "{}: saved workspace {id} to '{name}' — {count} windows (workspace {id} only)",
-            crate::color::hr(),
-        );
-    } else if had_entry {
-        session.save_to(path)?;
-        println!(
-            "{}: workspace {id} has no windows, removed from '{name}'",
-            crate::color::hr(),
-        );
-    } else {
-        println!(
-            "{}: workspace {id} has no windows, nothing to save",
-            crate::color::hr(),
-        );
+    match outcome {
+        ScopedOutcome::Saved(count) => {
+            session.save_to(path)?;
+            println!(
+                "{}: saved workspace {id} to '{name}' — {count} windows (workspace {id} only)",
+                crate::color::hr(),
+            );
+        }
+        ScopedOutcome::Removed => {
+            session.save_to(path)?;
+            println!(
+                "{}: workspace {id} has no windows, removed from '{name}'",
+                crate::color::hr(),
+            );
+        }
+        ScopedOutcome::NoOp => {
+            println!(
+                "{}: workspace {id} has no windows, nothing to save",
+                crate::color::hr(),
+            );
+        }
     }
 
     Ok(())
+}
+
+#[derive(Debug, PartialEq)]
+enum ScopedOutcome {
+    /// Workspace had windows — write them to the session file.
+    Saved(usize),
+    /// Workspace had no windows but a prior entry existed — write the removal.
+    Removed,
+    /// Workspace had no windows and no prior entry — nothing to write.
+    NoOp,
+}
+
+fn scoped_outcome(had_entry: bool, count: Option<usize>) -> ScopedOutcome {
+    match (count, had_entry) {
+        (Some(count), _) => ScopedOutcome::Saved(count),
+        (None, true) => ScopedOutcome::Removed,
+        (None, false) => ScopedOutcome::NoOp,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn window(class: &str) -> WindowEntry {
+        WindowEntry {
+            class: class.to_owned(),
+            exe: format!("/usr/bin/{class}"),
+            launch_args: None,
+            col_width: 0.5,
+        }
+    }
+
+    #[test]
+    fn group_into_workspaces_orders_by_workspace_then_x() {
+        let rows = vec![
+            (2, 100, window("b")),
+            (1, 200, window("a2")),
+            (1, 0, window("a1")),
+            (2, 0, window("a")),
+        ];
+
+        let workspaces = group_into_workspaces(rows);
+
+        assert_eq!(workspaces.len(), 2);
+        assert_eq!(workspaces[0].workspace, 1);
+        assert_eq!(
+            workspaces[0]
+                .windows
+                .iter()
+                .map(|w| w.class.as_str())
+                .collect::<Vec<_>>(),
+            vec!["a1", "a2"]
+        );
+        assert_eq!(workspaces[1].workspace, 2);
+        assert_eq!(
+            workspaces[1]
+                .windows
+                .iter()
+                .map(|w| w.class.as_str())
+                .collect::<Vec<_>>(),
+            vec!["a", "b"]
+        );
+    }
+
+    #[test]
+    fn group_into_workspaces_empty_input_is_empty() {
+        assert_eq!(group_into_workspaces(Vec::new()), Vec::new());
+    }
+
+    #[test]
+    fn scoped_outcome_saved_when_windows_captured() {
+        assert_eq!(scoped_outcome(false, Some(3)), ScopedOutcome::Saved(3));
+        assert_eq!(scoped_outcome(true, Some(0)), ScopedOutcome::Saved(0));
+    }
+
+    #[test]
+    fn scoped_outcome_removed_when_empty_but_previously_present() {
+        assert_eq!(scoped_outcome(true, None), ScopedOutcome::Removed);
+    }
+
+    #[test]
+    fn scoped_outcome_noop_when_empty_and_never_present() {
+        assert_eq!(scoped_outcome(false, None), ScopedOutcome::NoOp);
+    }
 }
