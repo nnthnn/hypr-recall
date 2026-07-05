@@ -54,6 +54,7 @@ hypr-recall restore -v                # verbose diagnostics on stderr (launch co
 hypr-recall restore --session-restore-app myapp  # treat myapp as a session-restore app
 hypr-recall status                    # show saved session summary
 hypr-recall edit                      # open session file in $EDITOR
+hypr-recall delete work               # delete a saved session
 hypr-recall save --file ~/my-session.json        # explicit path (overrides name)
 ```
 

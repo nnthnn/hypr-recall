@@ -5,6 +5,7 @@ use std::path::PathBuf;
 
 mod color;
 mod config;
+mod delete;
 mod edit;
 mod hyprland;
 mod list;
@@ -105,6 +106,13 @@ enum Commands {
         #[arg(short, long, help = "Explicit path to session file (overrides name)")]
         file: Option<PathBuf>,
     },
+    /// Delete a saved session
+    Delete {
+        /// Session name (default: "session")
+        name: Option<String>,
+        #[arg(short, long, help = "Explicit path to session file (overrides name)")]
+        file: Option<PathBuf>,
+    },
 }
 
 fn session_dir() -> PathBuf {
@@ -162,6 +170,10 @@ async fn main() -> Result<()> {
         Commands::Edit { name, file } => {
             let path = session_path(name, file);
             edit::run(&path)?;
+        }
+        Commands::Delete { name, file } => {
+            let path = session_path(name, file);
+            delete::run(&path)?;
         }
         Commands::List => {
             list::run(&session_dir())?;
