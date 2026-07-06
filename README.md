@@ -51,6 +51,7 @@ hypr-recall save work --workspace 2      # save only workspace 2, merged into th
 hypr-recall list                      # list all saved sessions with age and window counts
 hypr-recall restore --dry-run         # preview what would be restored
 hypr-recall restore -v                # verbose diagnostics on stderr (launch counts, column swaps)
+hypr-recall restore -q                # quiet: suppress progress output (warnings/errors still print)
 hypr-recall restore --session-restore-app myapp  # treat myapp as a session-restore app
 hypr-recall status                    # show saved session summary
 hypr-recall edit                      # open session file in $EDITOR
@@ -88,6 +89,13 @@ Add to your `hyprland.lua` to restore your session when Hyprland starts:
 
 ```lua
 hl.exec("hypr-recall restore")
+```
+
+Progress output goes to Hyprland's log with nothing to read it; add `-q` to
+skip it entirely and keep only warnings/errors:
+
+```lua
+hl.exec("hypr-recall restore -q")
 ```
 
 ### Auto-save on shutdown

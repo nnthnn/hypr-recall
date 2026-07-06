@@ -165,7 +165,7 @@ pub async fn run(
     };
 
     let scope = only_workspace.map_or(String::new(), |w| format!(" (workspace {w} only)"));
-    println!("{}: restoring '{name}'{scope}", crate::color::hr());
+    crate::progress!("{}: restoring '{name}'{scope}", crate::color::hr());
     let mut overlay = if cfg.overlay { spawn_overlay() } else { None };
 
     let lock_path = path.with_file_name("restore.lock");
@@ -188,7 +188,7 @@ pub async fn run(
     let total_workspaces = workspaces.len();
     for (ws_idx, &ws_entry) in workspaces.iter().enumerate() {
         let ws_id = ws_entry.workspace;
-        println!(
+        crate::progress!(
             "{}: restoring workspace {ws_id} ({} windows)",
             crate::color::hr(),
             ws_entry.windows.len()
@@ -291,7 +291,7 @@ pub async fn run(
     // For a single-workspace restore, end focused on that workspace rather than
     // jumping to the session's saved active workspace (which we didn't restore).
     hyprland::focus_workspace(only_workspace.unwrap_or(session.active_workspace))?;
-    println!("{}: restore complete", crate::color::hr());
+    crate::progress!("{}: restore complete", crate::color::hr());
     Ok(())
 }
 
@@ -493,7 +493,7 @@ async fn fix_stray_windows(workspaces: &[&WorkspaceEntry], settle_secs: u64) -> 
     }
 
     if moved > 0 {
-        println!(
+        crate::progress!(
             "{}: moved {moved} stray window(s) to correct workspace(s)",
             crate::color::hr()
         );
