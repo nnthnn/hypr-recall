@@ -30,15 +30,16 @@ pub struct Session {
 impl Session {
     pub fn load(path: &Path) -> Result<Self> {
         let text = std::fs::read_to_string(path)?;
-        let session: Self = serde_json::from_str(&text)?;
-        if session.version != SESSION_VERSION {
+        let mut session: Self = serde_json::from_str(&text)?;
+        if session.version > SESSION_VERSION {
             bail!(
-                "session file version {} is not supported (current format is version {})\n\
-                 Run 'hypr-recall save' to create a new session file.",
+                "session file version {} is newer than this build supports (current format is version {})\n\
+                 Update hypr-recall to restore this session.",
                 session.version,
                 SESSION_VERSION
             );
         }
+        migrate(&mut session)?;
         Ok(session)
     }
 
@@ -70,6 +71,22 @@ impl Session {
             self.workspaces.sort_by_key(|w| w.workspace);
         }
     }
+}
+
+/// Upgrades `session` in place from its stored version to `SESSION_VERSION`,
+/// one step at a time. Add a match arm here whenever `SESSION_VERSION` is
+/// bumped, transforming the fields that changed in that step.
+fn migrate(session: &mut Session) -> Result<()> {
+    while session.version < SESSION_VERSION {
+        match session.version {
+            // Pre-versioning session files (before this field existed) have
+            // the same shape as v1 — nothing to transform, just stamp it.
+            0 => {}
+            v => bail!("no migration path from session version {v}"),
+        }
+        session.version += 1;
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -149,11 +166,26 @@ mod tests {
     }
 
     #[test]
-    fn missing_version_field_errors() {
+    fn missing_version_field_migrates_to_current() {
         let path = std::env::temp_dir().join("hypr-recall-test-no-version.json");
         std::fs::write(&path, r#"{"active_workspace":1,"workspaces":[]}"#).unwrap();
-        let err = Session::load(&path).unwrap_err();
-        assert!(err.to_string().contains("version 0"));
+        let session = Session::load(&path).unwrap();
+        assert_eq!(session.version, SESSION_VERSION);
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn migrated_session_round_trips_at_current_version() {
+        let path = std::env::temp_dir().join("hypr-recall-test-migrate-round-trip.json");
+        std::fs::write(
+            &path,
+            r#"{"active_workspace":1,"workspaces":[{"workspace":1,"windows":[{"class":"foo","exe":"/usr/bin/foo","col_width":0.5}]}]}"#,
+        )
+        .unwrap();
+        let session = Session::load(&path).unwrap();
+        session.save_to(&path).unwrap();
+        let reloaded = Session::load(&path).unwrap();
+        assert_eq!(reloaded.version, SESSION_VERSION);
         std::fs::remove_file(&path).ok();
     }
 
