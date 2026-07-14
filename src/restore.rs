@@ -405,13 +405,36 @@ pub fn run_dry(
 
             if needed == 0 {
                 println!("    {class:<40} → skip ({} already open)", plan.pre);
-            } else if plan.session_restore {
-                println!(
-                    "    {class:<40} → launch 1  [session-restore, waits for {needed} window{}]{args_suffix}",
-                    if needed == 1 { "" } else { "s" }
-                );
             } else {
-                println!("    {class:<40} → launch {needed}{args_suffix}");
+                match resolve_launch_command(class, &plan.exe) {
+                    None => {
+                        println!(
+                            "    {class:<40} → SKIP (binary missing, no .desktop match)"
+                        );
+                    }
+                    Some(cmd) if cmd[0] != plan.exe => {
+                        let resolved = &cmd[0];
+                        if plan.session_restore {
+                            println!(
+                                "    {class:<40} → launch 1  [session-restore, waits for {needed} window{}, via {resolved} — recorded exe missing]{args_suffix}",
+                                if needed == 1 { "" } else { "s" }
+                            );
+                        } else {
+                            println!(
+                                "    {class:<40} → launch {needed}  [via {resolved} — recorded exe missing]{args_suffix}"
+                            );
+                        }
+                    }
+                    Some(_) if plan.session_restore => {
+                        println!(
+                            "    {class:<40} → launch 1  [session-restore, waits for {needed} window{}]{args_suffix}",
+                            if needed == 1 { "" } else { "s" }
+                        );
+                    }
+                    Some(_) => {
+                        println!("    {class:<40} → launch {needed}{args_suffix}");
+                    }
+                }
             }
         }
         println!();
