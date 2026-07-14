@@ -134,6 +134,18 @@ fn select_workspaces(session: &Session, only: Option<i32>) -> Option<Vec<&Worksp
     }
 }
 
+/// Resolve a launch command for `class`/`exe`: use `exe` as-is if it still
+/// exists on disk (the common case — nothing changed since save time),
+/// otherwise fall back to a `.desktop` file lookup by window class, since
+/// versioned install paths (e.g. Discord's `app-<version>/Discord`) break on
+/// every app update even though the app itself is still installed.
+fn resolve_launch_command(class: &str, exe: &str) -> Option<Vec<String>> {
+    if Path::new(exe).exists() {
+        return Some(vec![exe.to_owned()]);
+    }
+    crate::desktop_entry::resolve_by_class(class, &crate::desktop_entry::search_dirs())
+}
+
 pub async fn run(
     path: &Path,
     extra_restore_apps: &[String],
@@ -226,15 +238,35 @@ pub async fn run(
                 plan.pre
             );
 
+            let Some(cmd) = resolve_launch_command(class, exe) else {
+                eprintln!(
+                    "{}: could not restore \"{class}\" — binary \"{exe}\" not found and no matching \
+                     .desktop entry, skipping",
+                    crate::color::hr_err()
+                );
+                continue;
+            };
+
             if plan.session_restore {
                 // Launch once; the app restores all its windows itself
-                let mut child = tokio::process::Command::new(exe)
+                let spawned = tokio::process::Command::new(&cmd[0])
+                    .args(&cmd[1..])
                     .args(&plan.launch_args)
                     .stdin(Stdio::null())
                     .stdout(Stdio::null())
                     .stderr(Stdio::null())
-                    .spawn()
-                    .map_err(|e| anyhow::anyhow!("failed to spawn {exe}: {e}"))?;
+                    .spawn();
+                let mut child = match spawned {
+                    Ok(child) => child,
+                    Err(e) => {
+                        eprintln!(
+                            "{}: could not restore \"{class}\" — failed to spawn {}: {e}, skipping",
+                            crate::color::hr_err(),
+                            cmd[0]
+                        );
+                        continue;
+                    }
+                };
 
                 let deadline = Instant::now() + Duration::from_secs(20);
                 let got = events
@@ -257,13 +289,25 @@ pub async fn run(
                         continue;
                     }
 
-                    let mut child = tokio::process::Command::new(exe)
+                    let spawned = tokio::process::Command::new(&cmd[0])
+                        .args(&cmd[1..])
                         .args(&plan.launch_args)
                         .stdin(Stdio::null())
                         .stdout(Stdio::null())
                         .stderr(Stdio::null())
-                        .spawn()
-                        .map_err(|e| anyhow::anyhow!("failed to spawn {exe}: {e}"))?;
+                        .spawn();
+                    let mut child = match spawned {
+                        Ok(child) => child,
+                        Err(e) => {
+                            eprintln!(
+                                "{}: could not restore \"{class}\" (launch {launch_n}/{needed}) — \
+                                 failed to spawn {}: {e}, skipping",
+                                crate::color::hr_err(),
+                                cmd[0]
+                            );
+                            continue;
+                        }
+                    };
 
                     let deadline = Instant::now() + Duration::from_secs(20);
                     let got = events
@@ -767,6 +811,25 @@ mod tests {
         let entry = ws(vec![win("firefox", "/usr/lib/firefox (deleted)")]);
         let plans = plan_workspace(&entry, &HashMap::new(), &Config::default(), &[]);
         assert_eq!(plans[0].exe, "/usr/lib/firefox");
+    }
+
+    #[test]
+    fn resolve_launch_command_uses_exe_when_it_exists() {
+        let tmp = std::env::temp_dir().join("hypr-recall-restore-test-exe-exists");
+        std::fs::write(&tmp, b"").unwrap();
+        let exe = tmp.to_str().unwrap();
+        let cmd = resolve_launch_command("whatever-class", exe);
+        assert_eq!(cmd, Some(vec![exe.to_owned()]));
+        std::fs::remove_file(&tmp).ok();
+    }
+
+    #[test]
+    fn resolve_launch_command_returns_none_when_exe_and_desktop_entry_both_missing() {
+        let cmd = resolve_launch_command(
+            "definitely-not-a-real-class-xyz",
+            "/definitely/not/a/real/path/xyz",
+        );
+        assert_eq!(cmd, None);
     }
 
     fn session_with(ws_ids: &[i32]) -> Session {
