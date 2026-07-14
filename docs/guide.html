@@ -415,6 +415,16 @@
     Then it stops. It has done its job.
   </p>
 
+  <p>
+    Sometimes the binary you saved isn't there anymore — an update moved it,
+    a versioned install path shifted underneath it, whatever. hypr-recall
+    doesn't take this personally. It looks for a <code>.desktop</code> entry
+    matching the window's class and launches that instead. If nothing
+    resolves either, it prints a warning and skips just that one app,
+    rather than throwing up its hands and abandoning the entire restore
+    over a single missing Discord.
+  </p>
+
   <div class="aside">
     While all of this is happening, a spinning overlay bearing the hypr-recall
     logo floats above your workspaces. It shows which workspace is currently
@@ -435,6 +445,7 @@
   workspace 1 (3 windows)
     com.mitchellh.ghostty            → launch 2
     dev.zed.Zed                      → launch 1
+    discord                          → SKIP (binary missing, no .desktop match)
 
   workspace 2 (1 window)  ← active
     firefox                          → skip (1 already open)</code></pre>
@@ -442,7 +453,10 @@
   <p>
     Note that Firefox was already open, so hypr-recall would skip it.
     hypr-recall is not in the business of opening duplicate windows.
-    There are enough of those already.
+    There are enough of those already. Discord, meanwhile, gets the
+    capital-letter <code>SKIP</code> — its recorded binary is gone and no
+    <code>.desktop</code> entry could stand in for it, so the dry run tells
+    you now instead of letting you find out mid-restore.
   </p>
 
   <h3>Just the one workspace, please</h3>
