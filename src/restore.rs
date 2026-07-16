@@ -408,7 +408,9 @@ pub fn run_dry(
             } else {
                 match resolve_launch_command(class, &plan.exe) {
                     None => {
-                        println!("    {class:<40} → SKIP (binary missing, no .desktop match)");
+                        println!(
+                            "    {class:<40} → SKIP (binary missing, no .desktop match)"
+                        );
                     }
                     Some(cmd) if cmd[0] != plan.exe => {
                         let resolved = &cmd[0];
