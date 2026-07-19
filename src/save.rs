@@ -2,6 +2,7 @@ use anyhow::{Context, Result};
 use std::path::Path;
 
 use crate::hyprland;
+use crate::lock;
 use crate::session::{Session, WindowEntry, WorkspaceEntry};
 
 /// Scan live Hyprland clients into `WorkspaceEntry` groups, sorted by
@@ -82,9 +83,10 @@ fn group_into_workspaces(mut rows: Vec<(i32, i32, WindowEntry)>) -> Vec<Workspac
 }
 
 pub fn run(path: &Path, only_workspace: Option<i32>) -> Result<()> {
-    // Skip if a restore is in progress
+    // Skip if a restore is in progress (a stale lock left by a crashed
+    // restore doesn't count — same liveness check restore's LockGuard uses)
     let lock_path = path.with_file_name("restore.lock");
-    if lock_path.exists() {
+    if lock_path.exists() && lock::holder_is_alive(&lock_path) {
         eprintln!(
             "{}: restore in progress, skipping save",
             crate::color::hr_err()

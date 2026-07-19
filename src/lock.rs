@@ -24,7 +24,7 @@ impl LockGuard {
 /// An unreadable file, an unparseable PID, or a dead process all count as
 /// stale (`false`) so a lock left behind by a crashed restore is reclaimed
 /// rather than wedging the tool forever.
-fn holder_is_alive(path: &Path) -> bool {
+pub(crate) fn holder_is_alive(path: &Path) -> bool {
     let Ok(contents) = std::fs::read_to_string(path) else {
         return false;
     };
