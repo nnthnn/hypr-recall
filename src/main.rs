@@ -6,6 +6,7 @@ use std::path::PathBuf;
 mod color;
 mod config;
 mod delete;
+mod desktop_entry;
 mod edit;
 mod hyprland;
 mod list;
