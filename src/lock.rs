@@ -5,7 +5,7 @@ pub struct LockGuard(PathBuf);
 
 impl LockGuard {
     pub fn acquire(path: PathBuf) -> Result<Self> {
-        if path.exists() && holder_is_alive(&path) {
+        if Self::is_held(&path) {
             anyhow::bail!(
                 "restore already running (remove {} to override)",
                 path.display()
@@ -16,22 +16,22 @@ impl LockGuard {
         std::fs::write(&path, std::process::id().to_string())?;
         Ok(Self(path))
     }
-}
 
-/// Whether the process that wrote `path` is still running.
-///
-/// Returns `true` only when the file holds a PID that names a live process.
-/// An unreadable file, an unparseable PID, or a dead process all count as
-/// stale (`false`) so a lock left behind by a crashed restore is reclaimed
-/// rather than wedging the tool forever.
-pub(crate) fn holder_is_alive(path: &Path) -> bool {
-    let Ok(contents) = std::fs::read_to_string(path) else {
-        return false;
-    };
-    let Ok(pid) = contents.trim().parse::<u32>() else {
-        return false;
-    };
-    Path::new(&format!("/proc/{pid}")).exists()
+    /// Whether the process that wrote `path` is still running.
+    ///
+    /// Returns `true` only when the file holds a PID that names a live
+    /// process. A missing/unreadable file, an unparseable PID, or a dead
+    /// process all count as not held (`false`) so a lock left behind by a
+    /// crashed restore is reclaimed rather than wedging the tool forever.
+    pub(crate) fn is_held(path: &Path) -> bool {
+        let Ok(contents) = std::fs::read_to_string(path) else {
+            return false;
+        };
+        let Ok(pid) = contents.trim().parse::<u32>() else {
+            return false;
+        };
+        Path::new(&format!("/proc/{pid}")).exists()
+    }
 }
 
 impl Drop for LockGuard {
