@@ -4,6 +4,7 @@
 # hypr-recall
 
 [![CI](https://github.com/nnthnn/hypr-recall/actions/workflows/ci.yml/badge.svg)](https://github.com/nnthnn/hypr-recall/actions/workflows/ci.yml)
+[![Ko-fi](https://img.shields.io/badge/support-ko--fi-ff5e5b?logo=ko-fi&logoColor=white)](https://ko-fi.com/nnthnn)
 
 **[nnthnn.github.io/hypr-recall](https://nnthnn.github.io/hypr-recall/)**
 </div>
@@ -60,6 +61,8 @@ hypr-recall save --file ~/my-session.json        # explicit path (overrides name
 ```
 
 Sessions are stored as `~/.local/share/hypr-recall/<name>.json`. The default name is `session`.
+
+Restore execs the `exe` path stored in the session file directly, so anyone who can write to that file gets code execution the next time you restore — treat it with the same care as your shell config.
 
 ## What gets saved
 

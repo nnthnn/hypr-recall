@@ -157,6 +157,9 @@ fn socket2_path() -> Result<String> {
             return Ok(p);
         }
     }
+    // Last-resort guess, not verified to exist: if XDG_RUNTIME_DIR was unset
+    // or the socket wasn't found there, the caller's connect() will fail
+    // with a clear "failed to connect to socket2" error anyway.
     Ok(format!("/tmp/hypr/{sig}/.socket2.sock"))
 }
 
