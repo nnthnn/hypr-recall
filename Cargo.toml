@@ -24,6 +24,7 @@ overlay = ["dep:gtk4", "dep:gtk4-layer-shell", "dep:gdk-pixbuf"]
 [lints.clippy]
 pedantic = { level = "warn", priority = -2 }
 cargo = { level = "warn", priority = -2 }
+multiple_crate_versions = "allow"
 items_after_test_module = { level = "warn", priority = -1 }
 too_many_lines = "allow"
 str_to_string = "warn"
