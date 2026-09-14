@@ -17,27 +17,36 @@ No existing tool restores column positions and widths in scrolling layouts — h
 
 ## Install
 
-The restore overlay is an optional second binary (`hypr-recall-overlay`) gated
-behind the `overlay` cargo feature, which needs `gtk4` and `gtk4-layer-shell`
-installed. Build with `--all-features` to include it, or drop the flag for the
-core binary only.
+hypr-recall isn't published to the AUR yet, so for now build it from source.
+
+**Arch Linux — build from source:**
+```fish
+sudo pacman -S --needed base-devel git rust gtk4 gtk4-layer-shell
+git clone https://github.com/nnthnn/hypr-recall.git
+cd hypr-recall
+cargo build --release --all-features
+```
+
+`gtk4` and `gtk4-layer-shell` are only needed by the optional restore overlay
+(`hypr-recall-overlay`, gated behind the `overlay` cargo feature) — drop them
+and build without `--all-features` for the core binary only. Arch's `rust`
+package ignores the `rust-toolchain.toml` pin; that's only honored when building
+with `rustup` instead.
+
+**System-wide install:**
+```fish
+sudo install -Dm755 target/release/hypr-recall target/release/hypr-recall-overlay /usr/local/bin/
+```
+
+**User-local install** (no elevated privileges):
+```fish
+cp target/release/hypr-recall target/release/hypr-recall-overlay ~/.local/bin/
+```
 
 **With [`just`](https://github.com/casey/just)** (simplest):
 ```fish
 just install-all   # core + overlay into ~/.cargo/bin (needs gtk4 / gtk4-layer-shell)
 just install       # core binary only
-```
-
-**User-local** (no elevated privileges):
-```fish
-cargo build --release --all-features
-cp target/release/hypr-recall target/release/hypr-recall-overlay ~/.local/bin/
-```
-
-**System-wide:**
-```fish
-cargo build --release --all-features
-sudo install -Dm755 target/release/hypr-recall target/release/hypr-recall-overlay /usr/local/bin/
 ```
 
 ## Usage

@@ -1,0 +1,16 @@
+pkgbase = hypr-recall
+	pkgdesc = Save and restore Hyprland window sessions, including scrolling layout columns
+	pkgver = 0.4.0
+	pkgrel = 1
+	url = https://github.com/nnthnn/hypr-recall
+	arch = x86_64
+	arch = aarch64
+	license = MIT
+	makedepends = rust
+	depends = gtk4
+	depends = gtk4-layer-shell
+	optdepends = hyprland: required at runtime to save/restore sessions
+	source = hypr-recall-0.4.0.tar.gz::https://github.com/nnthnn/hypr-recall/archive/refs/tags/v0.4.0.tar.gz
+	sha256sums = 833eb0cf54c1d5c18421fb49c2bc2f91cd249f34cbd9c8f532c2f8968c2d851c
+
+pkgname = hypr-recall
