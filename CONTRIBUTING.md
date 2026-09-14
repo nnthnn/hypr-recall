@@ -74,6 +74,46 @@ The module map and key design decisions live in the README and in the source —
 `src/restore.rs` (the restore orchestration) and `src/hyprland.rs` (the `hyprctl`
 / socket2 IPC layer) are the best places to start.
 
+## Releasing
+
+`packaging/aur/hypr-recall/` is the source of truth for the AUR package.
+Releases are automated by `.github/workflows/release.yml`, which runs whenever
+a `v*` tag is pushed. Cutting a release is therefore just:
+
+```fish
+git tag vX.Y.Z
+git push origin vX.Y.Z
+```
+
+The workflow then:
+
+1. Verifies the tag matches the `version` in `Cargo.toml`.
+2. Builds a source tarball with `git archive` and attaches it to the GitHub
+   release. This is deliberate: GitHub's auto-generated `/archive/` tarballs are
+   not guaranteed to keep the same bytes, which would silently invalidate the
+   AUR `sha256sums`. A release asset does not change.
+3. Rewrites `pkgver`/`pkgrel`/`source`/`sha256sums` in the `PKGBUILD`, points
+   `source` at that release asset, regenerates `.SRCINFO` with `makepkg`, and
+   pushes both to the AUR's `hypr-recall.git` (a separate, per-package repo AUR
+   hosts — not this one). This step is skipped entirely until the AUR secret
+   below is configured, so tagging a release works with or without AUR access.
+
+One repository secret is needed to publish to the AUR: `AUR_SSH_PRIVATE_KEY`,
+the private half of a key registered to the AUR account that owns `hypr-recall`
+(add the public half under the account's SSH keys on the AUR website). Until
+that secret is set, the AUR job is skipped automatically and tagging a release
+still builds and publishes the GitHub release and its source tarball. Optionally
+set `AUR_COMMIT_EMAIL` to control the commit author; it defaults to
+`github-actions[bot]@users.noreply.github.com`.
+
+If you change other fields in `packaging/aur/hypr-recall/PKGBUILD` (dependencies,
+description, …), regenerate the committed `.SRCINFO` yourself before merging:
+
+```fish
+cd packaging/aur/hypr-recall
+makepkg --printsrcinfo > .SRCINFO
+```
+
 ## Scope
 
 A few things are intentionally out of scope: floating-window positions, special

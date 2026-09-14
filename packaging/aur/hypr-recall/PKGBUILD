@@ -1,0 +1,36 @@
+# Maintainer: Nathan Greenhaw <nathanlevingreenhaw@gmail.com>
+pkgname=hypr-recall
+pkgver=0.4.0
+pkgrel=1
+pkgdesc="Save and restore Hyprland window sessions, including scrolling layout columns"
+arch=('x86_64' 'aarch64')
+url="https://github.com/nnthnn/hypr-recall"
+license=('MIT')
+depends=('gtk4' 'gtk4-layer-shell')
+makedepends=('rust')
+optdepends=('hyprland: required at runtime to save/restore sessions')
+source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
+sha256sums=('833eb0cf54c1d5c18421fb49c2bc2f91cd249f34cbd9c8f532c2f8968c2d851c')
+
+prepare() {
+    cd "$pkgname-$pkgver"
+    cargo fetch --locked --target "$(rustc -vV | sed -n 's/host: //p')"
+}
+
+build() {
+    cd "$pkgname-$pkgver"
+    cargo build --frozen --release --all-features
+}
+
+check() {
+    cd "$pkgname-$pkgver"
+    cargo test --frozen --release --all-features
+}
+
+package() {
+    cd "$pkgname-$pkgver"
+    install -Dm755 "target/release/hypr-recall" "$pkgdir/usr/bin/hypr-recall"
+    install -Dm755 "target/release/hypr-recall-overlay" "$pkgdir/usr/bin/hypr-recall-overlay"
+    install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+    install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
+}

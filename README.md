@@ -17,6 +17,11 @@ No existing tool restores column positions and widths in scrolling layouts — h
 
 ## Install
 
+**Arch Linux (AUR):**
+```fish
+paru -S hypr-recall
+```
+
 The restore overlay is an optional second binary (`hypr-recall-overlay`) gated
 behind the `overlay` cargo feature, which needs `gtk4` and `gtk4-layer-shell`
 installed. Build with `--all-features` to include it, or drop the flag for the
