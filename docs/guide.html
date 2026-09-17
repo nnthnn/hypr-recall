@@ -747,10 +747,11 @@ hypr-recall: saved sessions
     which is a website that exists for exactly this purpose and does it remarkably well.
     We tried ImageMagick first. The edges were not good.</p>
 
-    <p><strong>2.</strong> This means hypr-recall never polls. It just listens.
-    No sleep loops, no arbitrary delays, no praying. Just clean IPC.
-    This is considered a virtue in systems programming and also in
-    waiting rooms.</p>
+    <p><strong>2.</strong> Window detection is event-driven: hypr-recall subscribes
+    to Hyprland's IPC event stream instead of busy-waiting for windows to appear.
+    (It does still read back <code>hyprctl clients</code> between launches to count
+    windows, and it is not above a short settling delay while the compositor
+    catches up.)</p>
 
     <p><strong>3.</strong> This is insertion sort, technically.
     But "insertion sort" doesn't sound nearly as interesting as

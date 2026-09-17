@@ -8,6 +8,12 @@ pub const SESSION_VERSION: u32 = 1;
 pub struct WindowEntry {
     pub class: String,
     pub exe: String,
+    /// Extra arguments to launch the app with.
+    ///
+    /// `save` never fills this in: it's a hand-edited per-session override (see
+    /// the per-app launch arguments section of the guide). For arguments that
+    /// should survive re-saving the session, use
+    /// `[apps.<class>] launch_args` in the config file instead.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub launch_args: Option<Vec<String>>,
     pub col_width: f64,

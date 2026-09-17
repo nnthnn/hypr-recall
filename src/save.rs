@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use std::collections::HashSet;
 use std::path::Path;
 
 use crate::hyprland;
@@ -13,6 +14,13 @@ fn capture_workspaces(only_workspace: Option<i32>) -> Result<Vec<WorkspaceEntry>
     let clients = hyprland::get_clients()?;
 
     let mut rows: Vec<(i32, i32, WindowEntry)> = Vec::new();
+    // Windows whose /proc/<pid>/exe can't be read are skipped (there's no
+    // launch path to store), but not silently — losing a window from the
+    // snapshot should be visible to the user.
+    let mut skipped_unreadable_exe: Vec<String> = Vec::new();
+    // Monitors missing from `hyprctl monitors` fall back to 1920px; warn once
+    // per monitor so an inaccurate col_width isn't invisible.
+    let mut warned_monitors: HashSet<i32> = HashSet::new();
 
     for client in &clients {
         if !client.mapped || client.floating || client.workspace_id <= 0 {
@@ -24,16 +32,29 @@ fn capture_workspaces(only_workspace: Option<i32>) -> Result<Vec<WorkspaceEntry>
             continue;
         }
 
-        let exe = match std::fs::read_link(format!("/proc/{}/exe", client.pid)) {
-            Ok(p) => {
-                let s = p.to_string_lossy().into_owned();
-                // Strip " (deleted)" suffix left by package updates
-                s.trim_end_matches(" (deleted)").to_owned()
-            }
-            Err(_) => continue,
+        let exe = if let Ok(p) = std::fs::read_link(format!("/proc/{}/exe", client.pid)) {
+            let s = p.to_string_lossy().into_owned();
+            // Strip " (deleted)" suffix left by package updates
+            s.trim_end_matches(" (deleted)").to_owned()
+        } else {
+            skipped_unreadable_exe.push(client.initial_class.clone());
+            continue;
         };
 
-        let monitor_width = monitor_widths.get(&client.monitor).copied().unwrap_or(1920);
+        let monitor_width = match monitor_widths.get(&client.monitor).copied() {
+            Some(w) if w > 0 => w,
+            _ => {
+                if warned_monitors.insert(client.monitor) {
+                    eprintln!(
+                        "{}: no width for monitor {} — assuming 1920px, so col_width for its \
+                         windows may be inaccurate",
+                        crate::color::hr_err(),
+                        client.monitor,
+                    );
+                }
+                1920
+            }
+        };
 
         let col_width =
             (f64::from(client.width) / f64::from(monitor_width) * 1000.0).round() / 1000.0;
@@ -48,6 +69,16 @@ fn capture_workspaces(only_workspace: Option<i32>) -> Result<Vec<WorkspaceEntry>
                 col_width,
             },
         ));
+    }
+
+    if !skipped_unreadable_exe.is_empty() {
+        eprintln!(
+            "{}: skipped {} window(s) with unreadable /proc/<pid>/exe ({}); they will not be \
+             restored",
+            crate::color::hr_err(),
+            skipped_unreadable_exe.len(),
+            skipped_unreadable_exe.join(", "),
+        );
     }
 
     Ok(group_into_workspaces(rows))

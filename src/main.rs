@@ -175,10 +175,11 @@ async fn main() -> Result<()> {
             session_restore_app,
         } => {
             let path = session_path(name, file);
+            let backend = hyprland::RealHyprland;
             if dry_run {
-                restore::run_dry(&path, &session_restore_app, &cfg, workspace)?;
+                restore::run_dry(&path, &session_restore_app, &cfg, workspace, &backend)?;
             } else {
-                restore::run(&path, &session_restore_app, &cfg, workspace).await?;
+                restore::run(&path, &session_restore_app, &cfg, workspace, &backend).await?;
             }
         }
         Commands::Status { name, file } => {
