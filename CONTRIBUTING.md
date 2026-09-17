@@ -102,12 +102,17 @@ The module map and key design decisions live in the README and in the source —
 
 `packaging/aur/hypr-recall/` is the source of truth for the AUR package.
 Releases are automated by `.github/workflows/release.yml`, which runs whenever
-a `v*` tag is pushed. Cutting a release is therefore just:
+a `v*` tag is pushed. Cut one from a clean, up-to-date `main` with:
 
 ```fish
-git tag vX.Y.Z
-git push origin vX.Y.Z
+just release X.Y.Z
 ```
+
+The recipe bumps `version` in `Cargo.toml`, refreshes `Cargo.lock`, runs the
+pre-PR checks, commits as `Release X.Y.Z`, and pushes the tag. Cut a release by
+hand only if you replicate all of that: the tag must point at a commit whose
+`Cargo.toml` `version` equals the tag, and the workflow's first step rejects it
+otherwise (which is exactly what it's there to catch).
 
 The workflow then:
 
