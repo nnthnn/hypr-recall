@@ -13,7 +13,8 @@ the development workflow, and what's expected before a pull request.
 - **Build tools** — `sudo pacman -S --needed base-devel git` (brings in
   `pkg-config`, needed to build the GTK bindings).
 - **[`just`](https://github.com/casey/just)** — optional, but the dev tasks are
-  wrapped in a `justfile`. Run `just` to list recipes.
+  wrapped in a `justfile`. Run `just` to list recipes. (It's also used by the
+  optional git hooks below.)
 - **gtk4 + gtk4-layer-shell** — only needed to build the optional restore
   overlay (the `overlay` cargo feature). The core binary builds without them.
 
@@ -49,6 +50,25 @@ cargo fmt --check
 cargo clippy --all-targets -- -D warnings
 cargo test
 ```
+
+### Git hooks (optional)
+
+A tracked `.githooks/` directory holds two hooks that catch the format/lint
+failures CI would otherwise reject. Enable them once per clone:
+
+```fish
+just install-hooks
+```
+
+`core.hooksPath` is shared git config, so one run also covers every worktree of
+this repo.
+
+- **`pre-commit`** — runs `rustfmt` over the Rust files staged for this commit
+  and re-stages any changes, so commits are always formatted. Only the staged
+  files are touched. A partially-staged file is a known caveat: rustfmt rewrites
+  the whole working-tree file, so its unstaged hunks get folded in too.
+- **`pre-push`** — runs `just fmt-check clippy` (the checks CI gates on). Tests
+  and the overlay build are left to CI so pushes stay fast.
 
 CI mirrors this across three jobs: a core lint/test job, an overlay job that
 builds the `overlay` feature against gtk4, and a `cargo-deny` advisory audit.

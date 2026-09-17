@@ -49,3 +49,11 @@ install-all:
 # Audit dependencies for known security advisories (needs cargo-deny).
 audit:
     cargo deny check advisories
+
+# One-time: point git at the tracked .githooks/ dir. The pre-commit hook
+# auto-formats staged Rust files and folds the changes into the commit; the
+# pre-push hook runs `fmt-check` + `clippy`. core.hooksPath lives in the shared
+# git config, so one run covers every worktree of this repo.
+install-hooks:
+    git config core.hooksPath .githooks
+    chmod +x .githooks/*
