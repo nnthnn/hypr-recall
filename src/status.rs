@@ -6,12 +6,12 @@ use crate::session::Session;
 
 pub fn run(path: &Path) -> Result<()> {
     if !path.exists() {
-        println!(
+        eprintln!(
             "{}: no session file at {}",
-            crate::color::hr(),
+            crate::color::hr_err(),
             path.display()
         );
-        println!("  run 'hypr-recall save' to create one");
+        eprintln!("  run 'hypr-recall save' to create one");
         return Ok(());
     }
 

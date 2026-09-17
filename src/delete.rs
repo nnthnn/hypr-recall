@@ -3,9 +3,9 @@ use std::path::Path;
 
 pub fn run(path: &Path) -> Result<()> {
     if !path.exists() {
-        println!(
+        eprintln!(
             "{}: no session file at {}",
-            crate::color::hr(),
+            crate::color::hr_err(),
             path.display()
         );
         return Ok(());

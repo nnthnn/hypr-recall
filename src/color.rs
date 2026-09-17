@@ -19,6 +19,17 @@ pub fn gradient(text: &str) -> String {
     colorize(text, std::io::stdout().is_terminal())
 }
 
+/// The version number, bold purple (#a855f7) so it picks up where the name
+/// gradient ends, colorized when **stdout** is a TTY. clap renders `--version`
+/// as `<display_name> <version>` with no styling of its own, so both halves
+/// have to be pre-colored by us.
+pub fn version(version: &str) -> String {
+    if !std::io::stdout().is_terminal() {
+        return version.to_owned();
+    }
+    format!("\x1b[1m\x1b[38;2;168;85;247m{version}\x1b[0m")
+}
+
 #[allow(
     clippy::cast_precision_loss,      // text is a short name — no real precision lost
     clippy::cast_possible_truncation, // color values are bounded 0-255 by construction

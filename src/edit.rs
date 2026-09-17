@@ -4,7 +4,8 @@ use std::path::Path;
 pub fn run(path: &Path) -> Result<()> {
     if !path.exists() {
         eprintln!(
-            "hypr-recall: no session file at {} — run 'hypr-recall save' first",
+            "{}: no session file at {} — run 'hypr-recall save' first",
+            crate::color::hr_err(),
             path.display()
         );
         return Ok(());

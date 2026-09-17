@@ -138,10 +138,19 @@ fn session_path(name: Option<String>, file: Option<PathBuf>) -> PathBuf {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Intentional leak: clap's bin_name needs a &'static str and this runs
-    // once per short-lived process, so the gradient string lives for the run.
+    // Intentional leak: clap's bin_name and version need a &'static str and
+    // this runs once per short-lived process, so these strings live for the
+    // run.
     let g: &'static str = color::gradient("hypr-recall").leak();
-    let cmd = Cli::command().styles(styles()).bin_name(g);
+    // `display_name` brands the `--version` line; `bin_name` only covers
+    // help/usage. The version number is pre-colored because clap applies no
+    // style to `--version` output of its own.
+    let v: &'static str = color::version(env!("CARGO_PKG_VERSION")).leak();
+    let cmd = Cli::command()
+        .styles(styles())
+        .bin_name(g)
+        .display_name(g)
+        .version(v);
     let mut matches = cmd.get_matches();
     let cli = Cli::from_arg_matches_mut(&mut matches).unwrap_or_else(|e| e.exit());
     log::set_verbose(cli.verbose);
