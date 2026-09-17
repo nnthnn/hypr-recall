@@ -6,10 +6,8 @@ the development workflow, and what's expected before a pull request.
 ## Prerequisites
 
 - **Rust** — Arch's `rust` package (`sudo pacman -S --needed rust`) ships
-  `cargo`, `rustc`, `rustfmt` and `clippy`. Note that `rust-toolchain.toml` pins
-  a version that is only honored when building with `rustup`; the distro
-  toolchain ignores the pin and builds fine. CI uses the pinned version, so a
-  newer local `clippy` can occasionally emit different lints.
+  `cargo`, `rustc`, `rustfmt` and `clippy`. CI builds with a pinned Rust
+  version, so a newer local `clippy` can occasionally emit different lints.
 - **Build tools** — `sudo pacman -S --needed base-devel git` (brings in
   `pkg-config`, needed to build the GTK bindings).
 - **[`just`](https://github.com/casey/just)** — optional, but the dev tasks are

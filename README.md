@@ -29,9 +29,7 @@ cargo build --release --all-features
 
 `gtk4` and `gtk4-layer-shell` are only needed by the optional restore overlay
 (`hypr-recall-overlay`, gated behind the `overlay` cargo feature) — drop them
-and build without `--all-features` for the core binary only. Arch's `rust`
-package ignores the `rust-toolchain.toml` pin; that's only honored when building
-with `rustup` instead.
+and build without `--all-features` for the core binary only.
 
 **System-wide install:**
 ```fish
@@ -186,8 +184,8 @@ If the file doesn't exist, all defaults apply. Unknown keys are rejected to catc
 
 ## Development
 
-The toolchain is pinned via `rust-toolchain.toml`. Common tasks are wrapped in a
-[`justfile`](https://github.com/casey/just) — run `just` to list them:
+Common tasks are wrapped in a [`justfile`](https://github.com/casey/just) — run
+`just` to list them:
 
 ```fish
 just check       # fmt --check + clippy (-D warnings) + test  — run before every PR
