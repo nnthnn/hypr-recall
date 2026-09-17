@@ -1,7 +1,7 @@
 use gdk_pixbuf::PixbufLoader;
 use gtk4::{
-    gdk, glib, prelude::*, Application, ApplicationWindow, Box as GtkBox, CssProvider, Label,
-    Orientation, Picture,
+    Application, ApplicationWindow, Box as GtkBox, CssProvider, Label, Orientation, Picture, gdk,
+    glib, prelude::*,
 };
 use gtk4_layer_shell::{Edge, KeyboardMode, Layer, LayerShell};
 use std::sync::{Arc, Mutex};

@@ -25,10 +25,10 @@ pub fn resolve_by_class(class: &str, dirs: &[PathBuf]) -> Option<Vec<String>> {
         let Ok(text) = std::fs::read_to_string(path) else {
             continue;
         };
-        if find_key(&text, "StartupWMClass").is_some_and(|v| v.eq_ignore_ascii_case(class)) {
-            if let Some(cmd) = find_key(&text, "Exec").and_then(|e| parse_exec(&e)) {
-                return Some(cmd);
-            }
+        if find_key(&text, "StartupWMClass").is_some_and(|v| v.eq_ignore_ascii_case(class))
+            && let Some(cmd) = find_key(&text, "Exec").and_then(|e| parse_exec(&e))
+        {
+            return Some(cmd);
         }
     }
 
@@ -41,10 +41,10 @@ pub fn resolve_by_class(class: &str, dirs: &[PathBuf]) -> Option<Vec<String>> {
         if !matches_filename {
             continue;
         }
-        if let Ok(text) = std::fs::read_to_string(path) {
-            if let Some(cmd) = find_key(&text, "Exec").and_then(|e| parse_exec(&e)) {
-                return Some(cmd);
-            }
+        if let Ok(text) = std::fs::read_to_string(path)
+            && let Some(cmd) = find_key(&text, "Exec").and_then(|e| parse_exec(&e))
+        {
+            return Some(cmd);
         }
     }
 
@@ -79,10 +79,8 @@ fn find_key(text: &str, key: &str) -> Option<String> {
             in_main_section = line == "[Desktop Entry]";
             continue;
         }
-        if in_main_section {
-            if let Some(rest) = line.strip_prefix(&prefix) {
-                return Some(rest.trim().to_owned());
-            }
+        if in_main_section && let Some(rest) = line.strip_prefix(&prefix) {
+            return Some(rest.trim().to_owned());
         }
     }
     None
@@ -101,17 +99,17 @@ fn strip_field_codes(exec: &str) -> String {
     let mut out = String::new();
     let mut chars = exec.chars().peekable();
     while let Some(c) = chars.next() {
-        if c == '%' {
-            if let Some(&next) = chars.peek() {
-                if next == '%' {
-                    out.push('%');
-                    chars.next();
-                    continue;
-                }
-                if "fFuUdDnNickvm".contains(next) {
-                    chars.next();
-                    continue;
-                }
+        if c == '%'
+            && let Some(&next) = chars.peek()
+        {
+            if next == '%' {
+                out.push('%');
+                chars.next();
+                continue;
+            }
+            if "fFuUdDnNickvm".contains(next) {
+                chars.next();
+                continue;
             }
         }
         out.push(c);
@@ -228,8 +226,9 @@ mod tests {
         let dirs = search_dirs();
         let strs: Vec<String> = dirs.iter().map(|d| d.display().to_string()).collect();
         assert!(strs.iter().any(|d| d.ends_with("/usr/share/applications")));
-        assert!(strs
-            .iter()
-            .any(|d| d.ends_with("/var/lib/flatpak/exports/share/applications")));
+        assert!(
+            strs.iter()
+                .any(|d| d.ends_with("/var/lib/flatpak/exports/share/applications"))
+        );
     }
 }

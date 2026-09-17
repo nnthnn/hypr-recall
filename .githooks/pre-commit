@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# Auto-format staged Rust files before every commit, then fold any resulting
+# changes back into the commit. Installed via `just install-hooks`.
+#
+# Only formats files staged for this commit (not the whole repo). Note: if a
+# file is partially staged (some hunks staged, some not), formatting touches
+# the whole working-tree file, so unstaged hunks in that file ride along into
+# the commit too — same tradeoff most format-on-commit hooks make.
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+
+mapfile -t staged < <(git diff --cached --name-only --diff-filter=ACMR)
+rust_files=()
+for f in "${staged[@]}"; do
+    case "$f" in
+        *.rs) [[ -f "$f" ]] && rust_files+=("$f") ;;
+    esac
+done
+
+if [[ ${#rust_files[@]} -eq 0 ]]; then
+    exit 0
+fi
+
+# rustfmt invoked directly doesn't read Cargo.toml, and cargo fmt would touch
+# every target rather than just the staged files — so pull the edition out of
+# the manifest ourselves (same sed trick the release workflow uses).
+edition="$(sed -n 's/^edition = "\(.*\)"/\1/p' Cargo.toml | head -n1)"
+if [[ -z "$edition" ]]; then
+    echo "pre-commit: could not read 'edition' from Cargo.toml" >&2
+    exit 1
+fi
+
+if ! rustfmt --edition "$edition" "${rust_files[@]}"; then
+    echo "pre-commit: formatting failed, aborting commit" >&2
+    exit 1
+fi
+
+# Re-stage anything rustfmt touched so it's part of this commit.
+git add -- "${rust_files[@]}"

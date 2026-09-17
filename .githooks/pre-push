@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Fast verification before code leaves the machine: formatting and lints,
+# which are exactly what CI gates on. The test suite and the overlay build are
+# left to GitHub Actions so pushes don't block for minutes. Installed via
+# `just install-hooks`.
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+just fmt-check clippy
