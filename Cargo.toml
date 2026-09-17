@@ -5,6 +5,7 @@ edition = "2024"
 rust-version = "1.85"
 default-run = "hypr-recall"
 description = "Save and restore Hyprland window sessions with scrolling layout column order and width support"
+authors = ["Nathan Greenhaw <me@nathang.me>"]
 license = "MIT"
 repository = "https://github.com/nnthnn/hypr-recall"
 keywords = ["hyprland", "wayland", "session", "window-manager"]
