@@ -67,10 +67,10 @@ impl Config {
         class: &str,
         fallback: Option<&'a Vec<String>>,
     ) -> &'a [String] {
-        if let Some(app) = self.apps.get(class) {
-            if !app.launch_args.is_empty() {
-                return &app.launch_args;
-            }
+        if let Some(app) = self.apps.get(class)
+            && !app.launch_args.is_empty()
+        {
+            return &app.launch_args;
         }
         fallback.map_or(&[], Vec::as_slice)
     }

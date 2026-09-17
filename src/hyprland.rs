@@ -179,10 +179,10 @@ pub async fn subscribe_events() -> Result<mpsc::Receiver<HyprEvent>> {
     tokio::spawn(async move {
         let mut reader = tokio::io::BufReader::new(stream).lines();
         while let Ok(Some(line)) = reader.next_line().await {
-            if let Some(ev) = parse_event_line(&line) {
-                if tx.send(ev).await.is_err() {
-                    break;
-                }
+            if let Some(ev) = parse_event_line(&line)
+                && tx.send(ev).await.is_err()
+            {
+                break;
             }
         }
     });
@@ -248,10 +248,10 @@ impl EventStream {
             }
 
             // Declare done once the net count has been stable at target long enough.
-            if let Some(since) = stable_since {
-                if now.duration_since(since) >= STABILITY_WINDOW {
-                    break;
-                }
+            if let Some(since) = stable_since
+                && now.duration_since(since) >= STABILITY_WINDOW
+            {
+                break;
             }
 
             let remaining = hard_deadline - now;
@@ -270,19 +270,18 @@ impl EventStream {
             }
 
             // Check child exit for single-instance handoff detection.
-            if !child_done {
-                if let Some(ch) = child.as_deref_mut() {
-                    if let Ok(Some(_)) = ch.try_wait() {
-                        child_done = true;
-                        let elapsed = spawn_time.elapsed();
-                        if elapsed < Duration::from_millis(1500) {
-                            eprintln!(
-                                "  {class}: quick exit ({}ms) — single-instance handoff, extending wait to 8s",
-                                elapsed.as_millis()
-                            );
-                            hard_deadline = Instant::now() + Duration::from_secs(8);
-                        }
-                    }
+            if !child_done
+                && let Some(ch) = child.as_deref_mut()
+                && let Ok(Some(_)) = ch.try_wait()
+            {
+                child_done = true;
+                let elapsed = spawn_time.elapsed();
+                if elapsed < Duration::from_millis(1500) {
+                    eprintln!(
+                        "  {class}: quick exit ({}ms) — single-instance handoff, extending wait to 8s",
+                        elapsed.as_millis()
+                    );
+                    hard_deadline = Instant::now() + Duration::from_secs(8);
                 }
             }
 

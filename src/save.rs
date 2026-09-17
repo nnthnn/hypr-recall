@@ -18,10 +18,10 @@ fn capture_workspaces(only_workspace: Option<i32>) -> Result<Vec<WorkspaceEntry>
         if !client.mapped || client.floating || client.workspace_id <= 0 {
             continue;
         }
-        if let Some(only) = only_workspace {
-            if client.workspace_id != only {
-                continue;
-            }
+        if let Some(only) = only_workspace
+            && client.workspace_id != only
+        {
+            continue;
         }
 
         let exe = match std::fs::read_link(format!("/proc/{}/exe", client.pid)) {
