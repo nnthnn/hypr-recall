@@ -516,8 +516,8 @@
       </div>
       <div class="callout">
         <span class="callout-badge purple">smart</span>
-        <h3>Event-driven, not polling</h3>
-        <p>Subscribes to Hyprland's socket2 <code>openwindow</code> event stream. No busy-waits, no fixed delays — each window is detected the moment it appears.</p>
+        <h3>Event-driven window detection</h3>
+        <p>Subscribes to Hyprland's socket2 <code>openwindow</code>/<code>closewindow</code> event stream, so each window is detected the moment it appears rather than via a busy-wait.</p>
       </div>
     </div>
 

@@ -86,7 +86,7 @@ Floating windows and special workspaces are excluded.
 ## How restore works
 
 1. For each saved workspace (in order): switch to that workspace, then launch each app in saved column order
-2. Waits for each app's window to appear via Hyprland's IPC event socket (`openwindow` events) — no polling
+2. Waits for each app's window to appear via Hyprland's IPC event socket (`openwindow`/`closewindow` events) rather than a poll loop; window counts between launches are still read back from `hyprctl clients`
 3. Apps like Firefox and Zed that restore their own sessions are launched once per workspace; single-instance handoff is detected and handled (if the process exits within 1.5s, wait up to 8s for the window)
 4. If a saved app's binary no longer exists (e.g. it auto-updated to a new versioned install path), hypr-recall looks for a matching `.desktop` entry by window class and launches that instead; if neither resolves, it prints a warning and skips just that app rather than aborting the whole restore
 5. After all windows for a workspace are open: reorder columns to match the saved left-to-right order using `swapcol l` dispatches, then resize each column to its saved width ratio
