@@ -74,12 +74,17 @@ pub struct ClassPlan {
 }
 
 /// Build the per-class plan for a workspace, in saved column order, deduplicated
-/// by class (first occurrence wins for `exe`/`launch_args`). `pre_existing` is
-/// the count of already-open windows per class, snapshotted once before any
-/// workspace is restored.
+/// by class (first occurrence wins for `exe`/`launch_args`).
+///
+/// `pre_existing` is the count of already-open windows per class, snapshotted
+/// once before any workspace is restored. It is consumed as workspaces are
+/// planned: a pre-existing window can only stand in for the saved window it
+/// matches, so crediting it to every workspace that also contains the class
+/// would subtract it more than once and launch too few windows overall. The
+/// count is therefore decremented (down to zero) as each plan claims its share.
 fn plan_workspace(
     ws_entry: &crate::session::WorkspaceEntry,
-    pre_existing: &HashMap<String, usize>,
+    pre_existing: &mut HashMap<String, usize>,
     cfg: &Config,
     extra_restore_apps: &[String],
 ) -> Vec<ClassPlan> {
@@ -97,7 +102,18 @@ fn plan_workspace(
             .iter()
             .filter(|w| &w.class == class)
             .count();
-        let pre = pre_existing.get(class).copied().unwrap_or(0);
+
+        // Claim at most `saved_count` pre-existing windows for this workspace,
+        // carrying any surplus forward to later workspaces instead of losing it.
+        let available = pre_existing.get(class).copied().unwrap_or(0);
+        let pre = available.min(saved_count);
+        if pre > 0 {
+            if available == pre {
+                pre_existing.remove(class);
+            } else {
+                pre_existing.insert(class.clone(), available - pre);
+            }
+        }
 
         plans.push(ClassPlan {
             class: class.clone(),
@@ -105,7 +121,7 @@ fn plan_workspace(
             launch_args: cfg.launch_args(class, window.launch_args.as_ref()).to_vec(),
             saved_count,
             pre,
-            needed: saved_count.saturating_sub(pre),
+            needed: saved_count - pre,
             session_restore: cfg.is_session_restore_app(
                 class,
                 SESSION_RESTORE_APPS,
@@ -183,14 +199,20 @@ pub async fn run(
     let lock_path = path.with_file_name("restore.lock");
     let _lock = LockGuard::acquire(lock_path)?;
 
-    // Snapshot pre-existing window counts by class (before we launch anything)
-    let pre_existing: HashMap<String, usize> = {
+    // Snapshot pre-existing window counts by class, plus their addresses, before
+    // we launch anything. The counts keep us from re-launching apps that are
+    // already open; the addresses let `fix_stray_windows` tell windows this
+    // restore created apart from ones that were already there, so it never
+    // relocates a window the user deliberately had on another workspace.
+    let (mut pre_existing, pre_existing_addresses): (HashMap<String, usize>, HashSet<String>) = {
         let clients = hyprland::get_clients()?;
         let mut map: HashMap<String, usize> = HashMap::new();
+        let mut addresses: HashSet<String> = HashSet::new();
         for c in &clients {
             *map.entry(c.initial_class.clone()).or_default() += 1;
+            addresses.insert(c.address.clone());
         }
-        map
+        (map, addresses)
     };
 
     // Subscribe to openwindow events before launching anything (avoids race)
@@ -212,7 +234,7 @@ pub async fn run(
         hyprland::focus_workspace(ws_id)?;
         sleep(Duration::from_millis(200)).await;
 
-        for plan in plan_workspace(ws_entry, &pre_existing, cfg, extra_restore_apps) {
+        for plan in plan_workspace(ws_entry, &mut pre_existing, cfg, extra_restore_apps) {
             let class = &plan.class;
             let needed = plan.needed;
 
@@ -326,7 +348,7 @@ pub async fn run(
         reorder_columns(ws_id, ws_entry).await?;
     }
 
-    fix_stray_windows(&workspaces, cfg.settle_delay_secs).await?;
+    fix_stray_windows(&workspaces, cfg.settle_delay_secs, &pre_existing_addresses).await?;
 
     if let Some(ref mut ov) = overlay {
         ov.kill().await;
@@ -365,7 +387,7 @@ pub fn run_dry(
         return Ok(());
     };
 
-    let pre_existing: HashMap<String, usize> = {
+    let mut pre_existing: HashMap<String, usize> = {
         let clients = hyprland::get_clients()?;
         let mut map: HashMap<String, usize> = HashMap::new();
         for c in &clients {
@@ -393,7 +415,7 @@ pub fn run_dry(
             if ws_entry.windows.len() == 1 { "" } else { "s" },
         );
 
-        for plan in plan_workspace(ws_entry, &pre_existing, cfg, extra_restore_apps) {
+        for plan in plan_workspace(ws_entry, &mut pre_existing, cfg, extra_restore_apps) {
             let class = &plan.class;
             let needed = plan.needed;
 
@@ -512,12 +534,19 @@ pub fn plan_width_assignments(saved: &[(&str, f64)], live: &[LiveWindow]) -> Vec
 
 /// After the restored workspaces are populated, some apps (e.g. Discord) open
 /// late windows that land on the wrong workspace because focus has already moved
-/// on. Walk every live client: if its class belongs to a restored workspace and
-/// it ended up somewhere else, silently move it to the expected workspace.
+/// on. Walk the live clients this restore is responsible for and, for any whose
+/// class belongs to a restored workspace but which ended up elsewhere, move it
+/// to the expected workspace.
 ///
 /// `workspaces` is the set actually restored, so a single-workspace restore only
 /// ever sweeps windows toward that one workspace and never disturbs others.
-async fn fix_stray_windows(workspaces: &[&WorkspaceEntry], settle_secs: u64) -> Result<()> {
+/// `pre_existing` holds the addresses of windows that were already open before
+/// the restore began; see `stray_target` for what is deliberately left alone.
+async fn fix_stray_windows(
+    workspaces: &[&WorkspaceEntry],
+    settle_secs: u64,
+    pre_existing: &HashSet<String>,
+) -> Result<()> {
     // Wait for late-opening windows (e.g. Discord Friends sidebar) to appear
     // before we sweep. Without this, the sweep runs before Discord finishes.
     sleep(Duration::from_secs(settle_secs)).await;
@@ -539,14 +568,9 @@ async fn fix_stray_windows(workspaces: &[&WorkspaceEntry], settle_secs: u64) -> 
     let mut moved = 0usize;
 
     for client in &clients {
-        let Some(valid_workspaces) = class_to_ws.get(&client.initial_class) else {
+        let Some(target) = stray_target(client, &class_to_ws, pre_existing) else {
             continue;
         };
-        if valid_workspaces.contains(&client.workspace_id) {
-            continue;
-        }
-        // Window is on a workspace it doesn't belong to — move it silently.
-        let target = valid_workspaces[0];
         crate::debug!(
             "  fix: {} strayed to ws{} → moving to ws{target}",
             client.initial_class,
@@ -565,6 +589,35 @@ async fn fix_stray_windows(workspaces: &[&WorkspaceEntry], settle_secs: u64) -> 
     }
 
     Ok(())
+}
+
+/// Decide whether a live client is a stray window this restore should move,
+/// returning the workspace it belongs on, or `None` to leave it alone.
+///
+/// Only windows this restore plausibly created are swept:
+///
+/// - **pre-existing windows** (their address is in `pre_existing`) were open
+///   before the restore started and may have been put on another workspace on
+///   purpose, so they're never relocated;
+/// - **floating windows** aren't part of the saved tiling layout at all;
+/// - **special/scratchpad workspaces** have negative ids, which the session
+///   format doesn't model, so a window there can never be a valid target.
+fn stray_target(
+    client: &hyprland::HyprClient,
+    class_to_ws: &HashMap<String, Vec<i32>>,
+    pre_existing: &HashSet<String>,
+) -> Option<i32> {
+    if client.floating || client.workspace_id <= 0 {
+        return None;
+    }
+    if pre_existing.contains(&client.address) {
+        return None;
+    }
+    let valid = class_to_ws.get(&client.initial_class)?;
+    if valid.contains(&client.workspace_id) {
+        return None;
+    }
+    valid.first().copied()
 }
 
 async fn reorder_columns(ws_id: i32, ws_entry: &crate::session::WorkspaceEntry) -> Result<()> {
@@ -773,7 +826,7 @@ mod tests {
             win("ghostty", "/usr/bin/ghostty"),
             win("firefox", "/usr/lib/firefox"),
         ]);
-        let plans = plan_workspace(&entry, &HashMap::new(), &Config::default(), &[]);
+        let plans = plan_workspace(&entry, &mut HashMap::new(), &Config::default(), &[]);
 
         assert_eq!(plans.len(), 2, "duplicate class collapses to one plan");
         assert_eq!(plans[0].class, "ghostty", "column order preserved");
@@ -790,8 +843,8 @@ mod tests {
             win("ghostty", "/usr/bin/ghostty"),
             win("firefox", "/usr/lib/firefox"),
         ]);
-        let pre = HashMap::from([("ghostty".to_owned(), 1), ("firefox".to_owned(), 3)]);
-        let plans = plan_workspace(&entry, &pre, &Config::default(), &[]);
+        let mut pre = HashMap::from([("ghostty".to_owned(), 1), ("firefox".to_owned(), 3)]);
+        let plans = plan_workspace(&entry, &mut pre, &Config::default(), &[]);
 
         assert_eq!(plans[0].pre, 1);
         assert_eq!(plans[0].needed, 1, "2 saved - 1 pre");
@@ -804,7 +857,7 @@ mod tests {
             win("firefox", "/usr/lib/firefox"),
             win("ghostty", "/usr/bin/ghostty"),
         ]);
-        let plans = plan_workspace(&entry, &HashMap::new(), &Config::default(), &[]);
+        let plans = plan_workspace(&entry, &mut HashMap::new(), &Config::default(), &[]);
 
         assert!(plans[0].session_restore, "firefox is a built-in");
         assert!(!plans[1].session_restore, "ghostty is not");
@@ -822,7 +875,7 @@ mod tests {
         );
         let mut window = win("firefox", "/usr/lib/firefox");
         window.launch_args = Some(vec!["--ignored".to_owned()]);
-        let plans = plan_workspace(&ws(vec![window]), &HashMap::new(), &cfg, &[]);
+        let plans = plan_workspace(&ws(vec![window]), &mut HashMap::new(), &cfg, &[]);
 
         assert_eq!(plans[0].launch_args, vec!["--profile", "/work"]);
     }
@@ -830,7 +883,7 @@ mod tests {
     #[test]
     fn plan_trims_deleted_suffix_from_exe() {
         let entry = ws(vec![win("firefox", "/usr/lib/firefox (deleted)")]);
-        let plans = plan_workspace(&entry, &HashMap::new(), &Config::default(), &[]);
+        let plans = plan_workspace(&entry, &mut HashMap::new(), &Config::default(), &[]);
         assert_eq!(plans[0].exe, "/usr/lib/firefox");
     }
 
@@ -886,5 +939,118 @@ mod tests {
     fn select_missing_workspace_returns_none() {
         let session = session_with(&[1, 2, 3]);
         assert!(select_workspaces(&session, Some(9)).is_none());
+    }
+
+    #[test]
+    fn plan_consumes_pre_existing_across_workspaces() {
+        // Same class on two workspaces with one instance already open. The
+        // pre-existing window may only be credited once in total, otherwise
+        // each workspace subtracts it and we launch too few windows.
+        let mut pre = HashMap::from([("ghostty".to_owned(), 1)]);
+        let ws1 = ws(vec![
+            win("ghostty", "/usr/bin/ghostty"),
+            win("ghostty", "/usr/bin/ghostty"),
+        ]);
+        let ws2 = ws(vec![
+            win("ghostty", "/usr/bin/ghostty"),
+            win("ghostty", "/usr/bin/ghostty"),
+        ]);
+
+        let plan1 = plan_workspace(&ws1, &mut pre, &Config::default(), &[]);
+        let plan2 = plan_workspace(&ws2, &mut pre, &Config::default(), &[]);
+
+        assert_eq!(plan1[0].needed, 1);
+        assert_eq!(plan2[0].needed, 2);
+        assert_eq!(plan1[0].needed + plan2[0].needed, 3, "4 saved - 1 pre");
+    }
+
+    #[test]
+    fn plan_carries_surplus_pre_existing_forward() {
+        // Three instances already open, but the first workspace only needs two:
+        // the surplus must carry to the next workspace, not evaporate.
+        let mut pre = HashMap::from([("ghostty".to_owned(), 3)]);
+        let ws1 = ws(vec![
+            win("ghostty", "/usr/bin/ghostty"),
+            win("ghostty", "/usr/bin/ghostty"),
+        ]);
+        let ws2 = ws(vec![
+            win("ghostty", "/usr/bin/ghostty"),
+            win("ghostty", "/usr/bin/ghostty"),
+        ]);
+
+        let plan1 = plan_workspace(&ws1, &mut pre, &Config::default(), &[]);
+        let plan2 = plan_workspace(&ws2, &mut pre, &Config::default(), &[]);
+
+        assert_eq!(plan1[0].needed, 0);
+        assert_eq!(plan2[0].needed, 1);
+    }
+
+    fn client(
+        address: &str,
+        class: &str,
+        workspace: i32,
+        floating: bool,
+    ) -> crate::hyprland::HyprClient {
+        crate::hyprland::HyprClient {
+            address: address.into(),
+            initial_class: class.into(),
+            x: 0,
+            width: 100,
+            workspace_id: workspace,
+            pid: 1,
+            monitor: 0,
+            floating,
+            mapped: true,
+        }
+    }
+
+    #[test]
+    fn stray_target_moves_new_window_on_wrong_workspace() {
+        let class_to_ws = HashMap::from([("ghostty".to_owned(), vec![1])]);
+        let c = client("0xA", "ghostty", 2, false);
+        assert_eq!(stray_target(&c, &class_to_ws, &HashSet::new()), Some(1));
+    }
+
+    #[test]
+    fn stray_target_leaves_pre_existing_window_alone() {
+        // A window that was already open before the restore must never be
+        // relocated, even if its class matches and it's on another workspace.
+        let class_to_ws = HashMap::from([("ghostty".to_owned(), vec![1])]);
+        let c = client("0xA", "ghostty", 2, false);
+        let pre_existing = HashSet::from(["0xA".to_owned()]);
+        assert_eq!(stray_target(&c, &class_to_ws, &pre_existing), None);
+    }
+
+    #[test]
+    fn stray_target_leaves_floating_window_alone() {
+        let class_to_ws = HashMap::from([("ghostty".to_owned(), vec![1])]);
+        let c = client("0xA", "ghostty", 2, true);
+        assert_eq!(stray_target(&c, &class_to_ws, &HashSet::new()), None);
+    }
+
+    #[test]
+    fn stray_target_leaves_special_workspace_window_alone() {
+        let class_to_ws = HashMap::from([("ghostty".to_owned(), vec![1])]);
+        let c = client("0xA", "ghostty", -99, false);
+        assert_eq!(stray_target(&c, &class_to_ws, &HashSet::new()), None);
+    }
+
+    #[test]
+    fn stray_target_ignores_unknown_class_and_correct_workspace() {
+        let class_to_ws = HashMap::from([("ghostty".to_owned(), vec![1, 3])]);
+        let unknown = client("0xA", "firefox", 2, false);
+        assert_eq!(stray_target(&unknown, &class_to_ws, &HashSet::new()), None);
+        let already_valid = client("0xB", "ghostty", 3, false);
+        assert_eq!(
+            stray_target(&already_valid, &class_to_ws, &HashSet::new()),
+            None
+        );
+    }
+
+    #[test]
+    fn stray_target_uses_first_valid_workspace_for_multi_workspace_class() {
+        let class_to_ws = HashMap::from([("ghostty".to_owned(), vec![1, 3])]);
+        let c = client("0xA", "ghostty", 2, false);
+        assert_eq!(stray_target(&c, &class_to_ws, &HashSet::new()), Some(1));
     }
 }
