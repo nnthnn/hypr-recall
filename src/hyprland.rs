@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 use serde::Deserialize;
-use std::collections::{HashSet, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
+use std::future::Future;
 use std::process::Command;
 use std::time::{Duration, Instant};
 use tokio::io::AsyncBufReadExt;
@@ -146,6 +147,72 @@ pub fn swapcol_left() -> Result<()> {
 pub fn colresize(ratio: f64) -> Result<()> {
     dispatch(&format!("hl.dsp.layout(\"colresize {ratio:.3}\")"))?;
     Ok(())
+}
+
+/// The Hyprland operations the restore orchestration needs, behind a trait so
+/// it can be driven by a fake in tests instead of a live compositor.
+///
+/// The production implementation is [`RealHyprland`], a thin delegate to the
+/// free functions above. `sleep` is part of the trait deliberately: restore
+/// settles the layout with short waits, and tests shouldn't have to spend wall
+/// clock time on them.
+pub trait Backend: Send + Sync {
+    fn get_clients(&self) -> Result<Vec<HyprClient>>;
+    fn get_monitor_widths(&self) -> Result<HashMap<i32, i32>>;
+    fn get_workspace_clients_sorted(&self, ws_id: i32) -> Result<Vec<HyprClient>>;
+    fn focus_workspace(&self, id: i32) -> Result<()>;
+    fn focus_window(&self, address: &str) -> Result<()>;
+    fn move_to_workspace_silent(&self, address: &str, workspace_id: i32) -> Result<()>;
+    fn swapcol_left(&self) -> Result<()>;
+    fn colresize(&self, ratio: f64) -> Result<()>;
+    fn subscribe_events(&self) -> impl Future<Output = Result<mpsc::Receiver<HyprEvent>>> + Send;
+    fn sleep(&self, duration: Duration) -> impl Future<Output = ()> + Send;
+}
+
+/// The real Hyprland backend, talking to the compositor over `hyprctl` and the
+/// event socket.
+pub struct RealHyprland;
+
+impl Backend for RealHyprland {
+    fn get_clients(&self) -> Result<Vec<HyprClient>> {
+        get_clients()
+    }
+
+    fn get_monitor_widths(&self) -> Result<HashMap<i32, i32>> {
+        get_monitor_widths()
+    }
+
+    fn get_workspace_clients_sorted(&self, ws_id: i32) -> Result<Vec<HyprClient>> {
+        get_workspace_clients_sorted(ws_id)
+    }
+
+    fn focus_workspace(&self, id: i32) -> Result<()> {
+        focus_workspace(id)
+    }
+
+    fn focus_window(&self, address: &str) -> Result<()> {
+        focus_window(address)
+    }
+
+    fn move_to_workspace_silent(&self, address: &str, workspace_id: i32) -> Result<()> {
+        move_to_workspace_silent(address, workspace_id)
+    }
+
+    fn swapcol_left(&self) -> Result<()> {
+        swapcol_left()
+    }
+
+    fn colresize(&self, ratio: f64) -> Result<()> {
+        colresize(ratio)
+    }
+
+    fn subscribe_events(&self) -> impl Future<Output = Result<mpsc::Receiver<HyprEvent>>> + Send {
+        subscribe_events()
+    }
+
+    fn sleep(&self, duration: Duration) -> impl Future<Output = ()> + Send {
+        tokio::time::sleep(duration)
+    }
 }
 
 fn socket2_path() -> Result<String> {
