@@ -42,7 +42,12 @@ struct RawClient {
 
 #[derive(Deserialize)]
 struct RawWorkspaceRef {
-    id: i32,
+    /// Windows on an inactive special workspace come back without an `id` (the
+    /// object only has `address`/`type`/`name`), so this must not be required —
+    /// otherwise one scratchpad window makes the whole client list unparseable.
+    /// Missing means "not a normal workspace", which is all callers need.
+    #[serde(default)]
+    id: Option<i32>,
 }
 
 #[derive(Deserialize)]
@@ -61,8 +66,12 @@ pub fn get_clients() -> Result<Vec<HyprClient>> {
         .args(["clients", "-j"])
         .output()
         .context("failed to run hyprctl clients")?;
+    parse_clients(&out.stdout)
+}
+
+fn parse_clients(json: &[u8]) -> Result<Vec<HyprClient>> {
     let raw: Vec<RawClient> =
-        serde_json::from_slice(&out.stdout).context("failed to parse hyprctl clients")?;
+        serde_json::from_slice(json).context("failed to parse hyprctl clients")?;
     Ok(raw
         .into_iter()
         .map(|c| HyprClient {
@@ -70,7 +79,10 @@ pub fn get_clients() -> Result<Vec<HyprClient>> {
             initial_class: c.initial_class,
             x: c.at[0],
             width: c.size[0],
-            workspace_id: c.workspace.id,
+            // Normal workspaces have positive ids; special/inactive ones are
+            // either negative or absent, and every caller filters on `> 0` or a
+            // positive saved id, so collapsing "absent" to 0 is safe.
+            workspace_id: c.workspace.id.unwrap_or(0),
             pid: c.pid,
             monitor: c.monitor,
             floating: c.floating,
@@ -413,6 +425,62 @@ impl EventStream {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parses_clients_on_normal_workspaces() {
+        let json = br#"[
+            {
+                "address": "0xabc",
+                "mapped": true,
+                "floating": false,
+                "workspace": { "address": "2", "id": 2, "type": "normal", "name": "2" },
+                "at": [10, 20],
+                "size": [800, 600],
+                "initialClass": "firefox",
+                "pid": 42,
+                "monitor": 0
+            }
+        ]"#;
+        let clients = parse_clients(json).unwrap();
+        assert_eq!(clients.len(), 1);
+        assert_eq!(clients[0].workspace_id, 2);
+        assert_eq!(clients[0].initial_class, "firefox");
+    }
+
+    #[test]
+    fn parses_clients_on_inactive_special_workspace_without_id() {
+        // Hyprland omits `id` for a window on an inactive special workspace.
+        // This used to fail the entire clients parse, aborting restore before
+        // the overlay could map a single frame.
+        let json = br#"[
+            {
+                "address": "0xabc",
+                "mapped": true,
+                "floating": true,
+                "workspace": { "address": "special:scratch", "type": "special", "name": "special:scratch" },
+                "at": [0, 0],
+                "size": [800, 600],
+                "initialClass": "scratch",
+                "pid": 42,
+                "monitor": 0
+            },
+            {
+                "address": "0xdef",
+                "mapped": true,
+                "floating": false,
+                "workspace": { "address": "1", "id": 1, "type": "normal", "name": "1" },
+                "at": [0, 0],
+                "size": [800, 600],
+                "initialClass": "firefox",
+                "pid": 43,
+                "monitor": 0
+            }
+        ]"#;
+        let clients = parse_clients(json).unwrap();
+        assert_eq!(clients.len(), 2);
+        assert_eq!(clients[0].workspace_id, 0);
+        assert_eq!(clients[1].workspace_id, 1);
+    }
 
     #[test]
     fn parses_openwindow_event() {
