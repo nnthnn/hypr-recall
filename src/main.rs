@@ -179,7 +179,19 @@ async fn main() -> Result<()> {
             if dry_run {
                 restore::run_dry(&path, &session_restore_app, &cfg, workspace, &backend)?;
             } else {
-                restore::run(&path, &session_restore_app, &cfg, workspace, &backend).await?;
+                // A restore started from a config-time `exec` can be spawned
+                // before Hyprland's Wayland socket exists. Wait for startup to
+                // finish and recover the display name for the apps we launch.
+                let wayland_display = hyprland::wait_for_compositor().await;
+                restore::run(
+                    &path,
+                    &session_restore_app,
+                    &cfg,
+                    workspace,
+                    wayland_display.as_deref(),
+                    &backend,
+                )
+                .await?;
             }
         }
         Commands::Status { name, file } => {

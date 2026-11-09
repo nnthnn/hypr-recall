@@ -2,6 +2,7 @@ use anyhow::{Context, Result};
 use serde::Deserialize;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::future::Future;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{Duration, Instant};
 use tokio::io::AsyncBufReadExt;
@@ -227,12 +228,33 @@ impl Backend for RealHyprland {
     }
 }
 
+/// Hyprland's per-instance runtime directory, which holds its IPC sockets and
+/// `hyprland.lock`. The directory is created early in startup, before the
+/// sockets and lock file it eventually contains.
+fn instance_path() -> Option<PathBuf> {
+    let sig = std::env::var("HYPRLAND_INSTANCE_SIGNATURE").ok()?;
+    let xdg = std::env::var("XDG_RUNTIME_DIR")
+        .ok()
+        .map(|xdg| PathBuf::from(xdg).join("hypr").join(&sig));
+    let tmp = PathBuf::from("/tmp/hypr").join(&sig);
+
+    if let Some(path) = xdg.as_ref().filter(|path| path.exists()) {
+        return Some(path.clone());
+    }
+    if tmp.exists() {
+        return Some(tmp);
+    }
+    // Neither candidate exists yet (a restore started during Hyprland's own
+    // startup). Prefer the XDG location, which is where Hyprland will create it.
+    xdg.or(Some(tmp))
+}
+
 fn socket2_path() -> Result<String> {
     let sig = std::env::var("HYPRLAND_INSTANCE_SIGNATURE")
         .context("HYPRLAND_INSTANCE_SIGNATURE not set — are you running inside Hyprland?")?;
     if let Ok(xdg) = std::env::var("XDG_RUNTIME_DIR") {
         let p = format!("{xdg}/hypr/{sig}/.socket2.sock");
-        if std::path::Path::new(&p).exists() {
+        if Path::new(&p).exists() {
             return Ok(p);
         }
     }
@@ -240,6 +262,83 @@ fn socket2_path() -> Result<String> {
     // or the socket wasn't found there, the caller's connect() will fail
     // with a clear "failed to connect to socket2" error anyway.
     Ok(format!("/tmp/hypr/{sig}/.socket2.sock"))
+}
+
+/// How long to wait for Hyprland to finish starting when a restore is launched
+/// from a config-time exec, and how often to check.
+const COMPOSITOR_READY_TIMEOUT: Duration = Duration::from_secs(15);
+const COMPOSITOR_READY_POLL: Duration = Duration::from_millis(50);
+
+/// The Wayland display name Hyprland records in `hyprland.lock` once it is
+/// ready. The file is `<pid>\n<wayland display>\n`.
+fn wayland_display_from_lock(lock_path: &Path) -> Option<String> {
+    let contents = std::fs::read_to_string(lock_path).ok()?;
+    let display = contents.lines().nth(1)?.trim();
+    (!display.is_empty()).then(|| display.to_owned())
+}
+
+/// Wait until Hyprland is far enough through startup for a restore to work,
+/// returning the Wayland display children should use.
+///
+/// A command run from the top level of `hyprland.lua` is spawned while the
+/// config is parsed — before Hyprland creates its Wayland socket and before it
+/// starts answering `hyprctl`. The executor also exports `WAYLAND_DISPLAY` from
+/// a field that is still empty at that point, so the child cannot talk to the
+/// compositor even after Hyprland has finished starting. Waiting for
+/// `hyprland.lock` (written by `startCompositor`) and reading the socket name
+/// back out of it closes that race: a restore launched too early starts once
+/// Hyprland is usable instead of silently failing to show its overlay and
+/// launch its apps.
+///
+/// A manual restore is unaffected: when `WAYLAND_DISPLAY` is set and socket1
+/// already exists, this returns immediately. If Hyprland never appears, the
+/// timeout expires and the caller falls back to the inherited environment; the
+/// `hyprctl` calls that follow then report the real error.
+pub async fn wait_for_compositor() -> Option<String> {
+    let inherited = std::env::var("WAYLAND_DISPLAY")
+        .ok()
+        .filter(|display| !display.is_empty());
+    let Some(instance) = instance_path() else {
+        return inherited;
+    };
+
+    let socket1 = instance.join(".socket.sock");
+    let lock_path = instance.join("hyprland.lock");
+    let deadline = Instant::now() + COMPOSITOR_READY_TIMEOUT;
+    let mut waited = false;
+
+    loop {
+        let display = inherited
+            .clone()
+            .or_else(|| wayland_display_from_lock(&lock_path));
+        if display.is_some() && socket1.exists() {
+            if waited {
+                crate::debug!(
+                    "  Hyprland became ready — using WAYLAND_DISPLAY={}",
+                    display.as_deref().unwrap_or_default()
+                );
+            }
+            return display;
+        }
+
+        if Instant::now() >= deadline {
+            crate::debug!(
+                "  Hyprland was not ready after {}s — continuing with the inherited \
+                 WAYLAND_DISPLAY (restore may fail to launch apps)",
+                COMPOSITOR_READY_TIMEOUT.as_secs()
+            );
+            return display;
+        }
+
+        if !waited {
+            crate::debug!(
+                "  Hyprland is still starting — waiting up to {}s for its sockets",
+                COMPOSITOR_READY_TIMEOUT.as_secs()
+            );
+            waited = true;
+        }
+        tokio::time::sleep(COMPOSITOR_READY_POLL).await;
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -577,5 +676,32 @@ mod tests {
         stream.invalidate_buffered_open("0xZ");
 
         assert_eq!(stream.buffer.len(), 1);
+    }
+
+    #[test]
+    fn reads_wayland_display_from_lock_file() {
+        let dir =
+            std::env::temp_dir().join(format!("hypr-recall-lock-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("hyprland.lock");
+
+        std::fs::write(&path, "1234\nwayland-1\n").unwrap();
+        assert_eq!(
+            wayland_display_from_lock(&path),
+            Some("wayland-1".to_owned())
+        );
+
+        // Before the Wayland socket exists Hyprland writes an empty second line.
+        std::fs::write(&path, "1234\n\n").unwrap();
+        assert_eq!(wayland_display_from_lock(&path), None);
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn missing_lock_file_has_no_display() {
+        let path = std::env::temp_dir().join("hypr-recall-lock-does-not-exist-xyz");
+        std::fs::remove_file(&path).ok();
+        assert_eq!(wayland_display_from_lock(&path), None);
     }
 }

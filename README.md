@@ -99,14 +99,25 @@ Floating windows and special workspaces are excluded.
 Add to your `hyprland.lua` to restore your session when Hyprland starts:
 
 ```lua
-hl.exec("hypr-recall restore")
+hl.on("hyprland.start", function()
+    hl.exec_cmd("hypr-recall restore")
+end)
 ```
+
+Use the `hyprland.start` event rather than a top-level `hl.exec`/`hl.exec_cmd`
+call: the Lua spawn function is `hl.exec_cmd`, and top-level config code runs
+while Hyprland is still parsing, before its Wayland socket exists. Apps (and the
+overlay) launched from there have no usable display yet and can fail to start.
+`hypr-recall` waits for startup if it is launched that early, but the event is
+the reliable hook.
 
 Progress output goes to Hyprland's log with nothing to read it; add `-q` to
 skip it entirely and keep only warnings/errors:
 
 ```lua
-hl.exec("hypr-recall restore -q")
+hl.on("hyprland.start", function()
+    hl.exec_cmd("hypr-recall restore -q")
+end)
 ```
 
 ### Auto-save on shutdown
@@ -125,15 +136,15 @@ Save every 10 minutes so a crash never loses more than a few minutes of layout w
 
 ```lua
 hl.timer(function()
-    hl.exec("hypr-recall save")
+    hl.exec_cmd("hypr-recall save")
 end, { timeout = 600000, type = "repeat" })
 ```
 
 ### Manual keybinds
 
 ```lua
-hl.bind("SUPER", "F11", "exec", "hypr-recall restore")
-hl.bind("SUPER", "F12", "exec", "hypr-recall save")
+hl.bind("SUPER + F11", hl.dsp.exec_cmd("hypr-recall restore"))
+hl.bind("SUPER + F12", hl.dsp.exec_cmd("hypr-recall save"))
 ```
 
 

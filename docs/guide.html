@@ -572,8 +572,10 @@
     have to think about. Put this in your <code>hyprland.lua</code>:
   </p>
 
-  <pre><code><span class="cmt">-- restore on login</span>
-<span class="kw">hl.exec</span>(<span class="str">"hypr-recall restore"</span>)
+  <pre><code><span class="cmt">-- restore on login (wait for the compositor to be ready first)</span>
+<span class="kw">hl.on</span>(<span class="str">"hyprland.start"</span>, function()
+    <span class="kw">hl.exec_cmd</span>(<span class="str">"hypr-recall restore"</span>)
+end)
 
 <span class="cmt">-- save on shutdown, so you never lose more than the current session</span>
 <span class="kw">hl.on</span>(<span class="str">"hyprland.shutdown"</span>, function()
@@ -582,7 +584,7 @@ end)
 
 <span class="cmt">-- optional: save every 10 minutes, for the paranoid (affectionately)</span>
 <span class="kw">hl.timer</span>(function()
-    <span class="kw">hl.exec</span>(<span class="str">"hypr-recall save"</span>)
+    <span class="kw">hl.exec_cmd</span>(<span class="str">"hypr-recall save"</span>)
 end, { timeout = <span class="num">600000</span>, type = <span class="str">"repeat"</span> })</code></pre>
 
   <p>
