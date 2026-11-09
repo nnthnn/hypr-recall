@@ -485,7 +485,7 @@
     <div class="terminal">
       <code>
         <span class="cmt"># add to hyprland.lua — restore on login</span><br>
-        <span class="prompt">▸</span> <span class="cmd">hl.exec("hypr-recall restore")</span><br>
+        <span class="prompt">▸</span> <span class="cmd">hl.on("hyprland.start", function() hl.exec_cmd("hypr-recall restore") end)</span><br>
         <br>
         <span class="cmt"># snapshot your session (or give it a name)</span><br>
         <span class="prompt">▸</span> <span class="cmd">hypr-recall save</span><br>

@@ -46,22 +46,58 @@ impl OverlayHandle {
     }
 }
 
-fn spawn_overlay() -> Option<OverlayHandle> {
+/// Configure a child process to launch into the compositor this restore drives.
+///
+/// - `HL_INITIAL_WORKSPACE_TOKEN` is stripped. An autostart hook such as
+///   `hl.on("hyprland.start", ...)` exports a token pointing at the workspace
+///   that was active when Hyprland started. Children inherit it, and Hyprland
+///   would use it to pull the first window they open onto that workspace,
+///   overriding the workspace this restore just focused.
+/// - `WAYLAND_DISPLAY` is set explicitly. A restore launched from a config-time
+///   exec inherits the empty value Hyprland supplies before its Wayland socket
+///   exists; `wait_for_compositor` recovers the real name for us.
+fn prepare_child(cmd: &mut tokio::process::Command, wayland_display: Option<&str>) {
+    cmd.env_remove("HL_INITIAL_WORKSPACE_TOKEN");
+    if let Some(display) = wayland_display {
+        cmd.env("WAYLAND_DISPLAY", display);
+    }
+}
+
+/// Spawn an app with the restore's child environment. Callers report any
+/// failure with the class and launch number.
+fn spawn_app(
+    cmd: &[String],
+    launch_args: &[String],
+    wayland_display: Option<&str>,
+) -> std::io::Result<tokio::process::Child> {
+    let mut command = tokio::process::Command::new(&cmd[0]);
+    command
+        .args(&cmd[1..])
+        .args(launch_args)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    prepare_child(&mut command, wayland_display);
+    command.spawn()
+}
+
+fn spawn_overlay(wayland_display: Option<&str>) -> Option<OverlayHandle> {
     let mut path = std::env::current_exe().ok()?;
     path.set_file_name("hypr-recall-overlay");
     if !path.exists() {
         return None;
     }
-    let mut child = tokio::process::Command::new(path)
+    let mut command = tokio::process::Command::new(path);
+    command
         .stdin(Stdio::piped())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         // Tear the overlay down if `run` returns early via `?` before the
         // explicit kill — otherwise a mid-restore error leaves the fullscreen
         // layer-shell window stuck on screen with no way to dismiss it.
-        .kill_on_drop(true)
-        .spawn()
-        .ok()?;
+        .kill_on_drop(true);
+    prepare_child(&mut command, wayland_display);
+    let mut child = command.spawn().ok()?;
     let stdin = child.stdin.take()?;
     Some(OverlayHandle { child, stdin })
 }
@@ -184,6 +220,7 @@ pub async fn run<B: hyprland::Backend>(
     extra_restore_apps: &[String],
     cfg: &Config,
     only_workspace: Option<i32>,
+    wayland_display: Option<&str>,
     backend: &B,
 ) -> Result<()> {
     if !path.exists() {
@@ -212,10 +249,15 @@ pub async fn run<B: hyprland::Backend>(
 
     let scope = only_workspace.map_or(String::new(), |w| format!(" (workspace {w} only)"));
     crate::progress!("{}: restoring '{name}'{scope}", crate::color::hr());
-    let mut overlay = if cfg.overlay { spawn_overlay() } else { None };
 
     let lock_path = path.with_file_name("restore.lock");
     let _lock = LockGuard::acquire(lock_path)?;
+
+    let mut overlay = if cfg.overlay {
+        spawn_overlay(wayland_display)
+    } else {
+        None
+    };
 
     // Snapshot pre-existing window counts by class, plus their addresses, before
     // we launch anything. The counts keep us from re-launching apps that are
@@ -293,13 +335,7 @@ pub async fn run<B: hyprland::Backend>(
 
             if plan.session_restore {
                 // Launch once; the app restores all its windows itself
-                let spawned = tokio::process::Command::new(&cmd[0])
-                    .args(&cmd[1..])
-                    .args(&plan.launch_args)
-                    .stdin(Stdio::null())
-                    .stdout(Stdio::null())
-                    .stderr(Stdio::null())
-                    .spawn();
+                let spawned = spawn_app(&cmd, &plan.launch_args, wayland_display);
                 let mut child = match spawned {
                     Ok(child) => child,
                     Err(e) => {
@@ -339,13 +375,7 @@ pub async fn run<B: hyprland::Backend>(
                         continue;
                     }
 
-                    let spawned = tokio::process::Command::new(&cmd[0])
-                        .args(&cmd[1..])
-                        .args(&plan.launch_args)
-                        .stdin(Stdio::null())
-                        .stdout(Stdio::null())
-                        .stderr(Stdio::null())
-                        .spawn();
+                    let spawned = spawn_app(&cmd, &plan.launch_args, wayland_display);
                     let mut child = match spawned {
                         Ok(child) => child,
                         Err(e) => {
@@ -856,7 +886,7 @@ mod tests {
         let saved = ["a", "b", "c"];
         let mut live = vec![lw("0x1", "a"), lw("0x2", "b"), lw("0x3", "c")];
         let ops = plan_column_swaps(&saved, &mut live);
-        assert!(ops.is_empty());
+        assert_eq!(ops, []);
         assert_eq!(classes(&live), saved);
     }
 
@@ -891,7 +921,7 @@ mod tests {
         let saved = ["a"];
         let mut live = vec![lw("0x1", "a")];
         let ops = plan_column_swaps(&saved, &mut live);
-        assert!(ops.is_empty());
+        assert_eq!(ops, []);
     }
 
     #[test]
@@ -900,7 +930,7 @@ mod tests {
         let mut live = vec![lw("0x1", "a"), lw("0x2", "b")];
         let ops = plan_column_swaps(&saved, &mut live);
         // "x" not in live — should produce no op for it and not panic
-        assert!(ops.is_empty());
+        assert_eq!(ops, []);
     }
 
     #[test]
@@ -912,7 +942,7 @@ mod tests {
             lw("0x3", "ghostty"),
         ];
         let ops = plan_column_swaps(&saved, &mut live);
-        assert!(ops.is_empty());
+        assert_eq!(ops, []);
         assert_eq!(classes(&live), saved);
     }
 
@@ -1509,7 +1539,7 @@ mod tests {
             settle_delay_secs: 0,
             ..Config::default()
         };
-        run(&path, &[], &cfg, None, &mock).await.unwrap();
+        run(&path, &[], &cfg, None, None, &mock).await.unwrap();
 
         let focused = mock.focused_workspaces.lock().unwrap().clone();
         assert!(focused.contains(&2), "workspace 2 was attempted");
@@ -1547,7 +1577,7 @@ mod tests {
             settle_delay_secs: 0,
             ..Config::default()
         };
-        run(&path, &[], &cfg, None, &mock).await.unwrap();
+        run(&path, &[], &cfg, None, None, &mock).await.unwrap();
 
         assert_eq!(mock.order(1), vec!["a", "b"]);
         assert_eq!(
@@ -1558,5 +1588,28 @@ mod tests {
         if let Some(dir) = path.parent() {
             std::fs::remove_dir_all(dir).ok();
         }
+    }
+
+    #[test]
+    fn prepare_child_drops_initial_workspace_token_and_sets_display() {
+        use std::ffi::OsStr;
+
+        let mut cmd = tokio::process::Command::new("true");
+        cmd.env("HL_INITIAL_WORKSPACE_TOKEN", "startup-token");
+        prepare_child(&mut cmd, Some("wayland-9"));
+
+        let envs: Vec<_> = cmd.as_std().get_envs().collect();
+        assert!(
+            envs.iter().any(|(key, value)| {
+                *key == OsStr::new("HL_INITIAL_WORKSPACE_TOKEN") && value.is_none()
+            }),
+            "the autostart token must be removed, not inherited"
+        );
+        assert!(
+            envs.iter().any(|(key, value)| {
+                *key == OsStr::new("WAYLAND_DISPLAY") && *value == Some(OsStr::new("wayland-9"))
+            }),
+            "the recovered Wayland display must be exported to the child"
+        );
     }
 }
