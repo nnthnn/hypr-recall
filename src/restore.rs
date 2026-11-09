@@ -886,7 +886,7 @@ mod tests {
         let saved = ["a", "b", "c"];
         let mut live = vec![lw("0x1", "a"), lw("0x2", "b"), lw("0x3", "c")];
         let ops = plan_column_swaps(&saved, &mut live);
-        assert!(ops.is_empty());
+        assert_eq!(ops, []);
         assert_eq!(classes(&live), saved);
     }
 
@@ -921,7 +921,7 @@ mod tests {
         let saved = ["a"];
         let mut live = vec![lw("0x1", "a")];
         let ops = plan_column_swaps(&saved, &mut live);
-        assert!(ops.is_empty());
+        assert_eq!(ops, []);
     }
 
     #[test]
@@ -930,7 +930,7 @@ mod tests {
         let mut live = vec![lw("0x1", "a"), lw("0x2", "b")];
         let ops = plan_column_swaps(&saved, &mut live);
         // "x" not in live — should produce no op for it and not panic
-        assert!(ops.is_empty());
+        assert_eq!(ops, []);
     }
 
     #[test]
@@ -942,7 +942,7 @@ mod tests {
             lw("0x3", "ghostty"),
         ];
         let ops = plan_column_swaps(&saved, &mut live);
-        assert!(ops.is_empty());
+        assert_eq!(ops, []);
         assert_eq!(classes(&live), saved);
     }
 

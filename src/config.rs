@@ -107,7 +107,7 @@ mod tests {
         let cfg = parse("");
         assert!(cfg.overlay);
         assert_eq!(cfg.settle_delay_secs, 4);
-        assert!(cfg.session_restore_apps.is_empty());
+        assert_eq!(cfg.session_restore_apps, Vec::<String>::new());
         assert!(cfg.apps.is_empty());
     }
 
